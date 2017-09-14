@@ -15,7 +15,6 @@ import java.util.Arrays;
 public class ByteArrayPayloadTest {
 
     public void testCreation() {
-
         for(Triple<byte[],Integer,Integer> triple: Arrays.asList(
           new Triple<byte[],Integer,Integer>(null, 1, 2),
           new Triple<>(new byte[5], -1, 1),
@@ -30,8 +29,6 @@ public class ByteArrayPayloadTest {
                 System.out.printf("got %s as expected: %s\n", ex.getClass().getSimpleName(), ex.getMessage());
             }
         }
-
-
         for(Triple<byte[],Integer,Integer> triple: Arrays.asList(
           new Triple<>(new byte[5], 0, 5),
           new Triple<>(new byte[5], 2, 3),
@@ -40,5 +37,23 @@ public class ByteArrayPayloadTest {
             System.out.printf("buf: %s\n", buf);
             assert buf != null;
         }
+    }
+
+    public void testCopy() {
+        final byte[] buf="hello world".getBytes();
+        final byte[] hello="hello".getBytes(), world="world".getBytes();
+        ByteArrayPayload pl=new ByteArrayPayload(buf, 0, buf.length);
+        ByteArrayPayload pl2=pl.copy();
+        assert Arrays.equals(pl2.getBuf(), pl.getBuf());
+
+        pl=new ByteArrayPayload(buf, 0, 5);
+        pl2=pl.copy();
+        assert pl2.getLength() == hello.length;
+        assert Arrays.equals(hello, pl2.getBuf());
+
+        pl=new ByteArrayPayload(buf, 6, 5);
+        pl2=pl.copy();
+        assert pl2.getLength() == world.length;
+        assert Arrays.equals(world, pl2.getBuf());
     }
 }

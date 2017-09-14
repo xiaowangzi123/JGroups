@@ -20,7 +20,6 @@ public class ByteArrayPayload extends Payload {
 
     public ByteArrayPayload(byte[] buf, int offset, int length) {
         set(buf, offset, length);
-
     }
 
     public byte[]    getBuf()    {return buf;}
@@ -28,9 +27,15 @@ public class ByteArrayPayload extends Payload {
     public int       getLength() {return length;}
     public DataInput getInput()  {return new ByteArrayDataInputStream(buf, offset, length);}
 
-    /** Shallow copy: returns a ref to the same buffer (same semantics as in the original Message) */
+    /** Returns a ref to the same buffer if offset is 0 and the length is the same as the underlying byte[] array,
+     *  otherwise a copy of the subrange is made
+     */
     public ByteArrayPayload copy() {
-        return new ByteArrayPayload(buf, offset, length);
+        if(offset == 0 && length == buf.length)
+            return new ByteArrayPayload(buf, offset, length);
+        byte[] tmp=new byte[length];
+        System.arraycopy(buf, offset, tmp, 0, length);
+        return new ByteArrayPayload(tmp, 0, tmp.length);
     }
 
     public int serializedSize() {
