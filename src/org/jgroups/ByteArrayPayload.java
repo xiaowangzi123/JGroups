@@ -10,7 +10,7 @@ import java.io.DataOutput;
  * @author Bela Ban
  * @since  5.0.0
  */
-public class ByteArrayPayload extends Payload {
+public class ByteArrayPayload implements Payload {
     protected byte[] buf;
     protected int    offset, length;
 
