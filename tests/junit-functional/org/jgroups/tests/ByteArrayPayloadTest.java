@@ -2,6 +2,9 @@ package org.jgroups.tests;
 
 import org.jgroups.ByteArrayPayload;
 import org.jgroups.Global;
+import org.jgroups.util.Buffer;
+import org.jgroups.util.ByteArrayDataInputStream;
+import org.jgroups.util.ByteArrayDataOutputStream;
 import org.jgroups.util.Triple;
 import org.testng.annotations.Test;
 
@@ -55,5 +58,35 @@ public class ByteArrayPayloadTest {
         pl2=pl.copy();
         assert pl2.getLength() == world.length;
         assert Arrays.equals(world, pl2.getBuf());
+    }
+
+    public void testSerialization() throws Exception {
+        byte[] buf="hello world".getBytes();
+        int length="hello world".length();
+        _testSerialization(new ByteArrayPayload(buf, 0, length), buf.length);
+        _testSerialization(new ByteArrayPayload(buf, 0, 5), 5);
+    }
+
+
+    protected void _testSerialization(ByteArrayPayload pl, int length) throws Exception {
+        int size=pl.serializedSize();
+        ByteArrayDataOutputStream out=new ByteArrayDataOutputStream();
+        pl.writeTo(out);
+        assert size == out.position();
+
+        Buffer buf2=out.getBuffer();
+        ByteArrayDataInputStream in=new ByteArrayDataInputStream(buf2.getBuf(), buf2.getOffset(), buf2.getLength());
+        ByteArrayPayload pl2=pl.getClass().newInstance();
+        pl2.readFrom(in);
+
+        assert pl.getType() == pl2.getType();
+        assert pl.getOffset() == pl2.getOffset();
+        assert pl.getLength() == pl2.getLength();
+        assertEquals(pl.getBuf(), pl2.getBuf(), length);
+    }
+
+    protected void assertEquals(byte[] first, byte[] second, int length) {
+        for(int i=0; i < length; i++)
+            assert first[i] == second[i];
     }
 }
