@@ -467,6 +467,9 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
     // ================================= Default SocketFactory ========================
     protected SocketFactory           socket_factory=new DefaultSocketFactory();
 
+    // used to create payloads in received messages
+    protected PayloadFactory          payload_factory=new DefaultPayloadFactory();
+
     protected Bundler                 bundler;
 
     protected MessageProcessingPolicy msg_processing_policy=new MaxOneThreadPerSender();
@@ -654,6 +657,14 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
     public void setSocketFactory(SocketFactory factory) {
         if(factory != null)
             socket_factory=factory;
+    }
+
+    public PayloadFactory getPayloadFactory() {return payload_factory;}
+
+    public TP setPayloadFactory(PayloadFactory f) {
+        if(f != null)
+            payload_factory=f;
+        return this;
     }
 
     /**
