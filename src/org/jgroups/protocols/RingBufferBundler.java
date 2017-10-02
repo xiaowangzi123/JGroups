@@ -136,7 +136,7 @@ public class RingBufferBundler extends BaseBundler {
         for(;;) {
             Message msg=buf[start_index];
             if(msg != null && Objects.equals(dest, msg.dest())) {
-                long size=msg.size();
+                long size=msg.serializedSize();
                 if(bytes + size > max_bundle_size)
                     break;
                 bytes+=size;

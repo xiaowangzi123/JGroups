@@ -95,10 +95,10 @@ public class RemoveQueueBundler extends BaseBundler {
 
             for(int i=0; i < drained; i++) {
                 Message msg=remove_queue[i];
-                long size=msg.size();
+                long size=msg.serializedSize();
                 if(count + size >= transport.getMaxBundleSize())
                     sendBundledMessages();
-                addMessage(msg, msg.size());
+                addMessage(msg, msg.serializedSize());
             }
             sendBundledMessages();
         }

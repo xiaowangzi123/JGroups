@@ -27,7 +27,7 @@ public class CompositePayloadTest {
         array[2]=new ByteArrayPayload();
 
         CompositePayload pl=new CompositePayload(2);
-        assert pl.size() == 0;
+        assert pl.numPayloads() == 0;
 
         try {
             pl=new CompositePayload(array);
@@ -41,34 +41,34 @@ public class CompositePayloadTest {
         array[1]=array[0];
         pl=new CompositePayload(array);
         System.out.println("pl = " + pl);
-        assert pl.size() == 3;
+        assert pl.numPayloads() == 3;
     }
 
     public void testAdd() {
         CompositePayload pl=new CompositePayload(2);
-        assert pl.size() == 0;
+        assert pl.numPayloads() == 0;
         pl.add(new ByteArrayPayload());
-        assert pl.size() == 1;
+        assert pl.numPayloads() == 1;
         pl.add(new ByteArrayPayload());
-        assert pl.size() == 2;
+        assert pl.numPayloads() == 2;
         pl.add(new ByteArrayPayload());
-        assert pl.size() == 3;
+        assert pl.numPayloads() == 3;
 
         pl=new CompositePayload(createPayloadArray(3));
         pl.add(new ByteArrayPayload());
-        assert pl.size() == 4;
+        assert pl.numPayloads() == 4;
     }
 
 
     public void testAddAtHead() {
         CompositePayload pl=new CompositePayload(2);
-        assert pl.size() == 0;
+        assert pl.numPayloads() == 0;
         pl.addAtHead(p1);
-        assert pl.size() == 1;
+        assert pl.numPayloads() == 1;
         pl.addAtHead(p2);
-        assert pl.size() == 2;
+        assert pl.numPayloads() == 2;
         pl.addAtHead(p3);
-        assert pl.size() == 3;
+        assert pl.numPayloads() == 3;
 
         assert pl.get(0) == p3;
         assert pl.get(1) == p2;
@@ -76,41 +76,41 @@ public class CompositePayloadTest {
 
         pl=new CompositePayload(createPayloadArray(3));
         pl.addAtHead(p1);
-        assert pl.size() == 4;
+        assert pl.numPayloads() == 4;
         assert pl.get(0) == p1;
     }
 
     public void testRemove() {
         CompositePayload pl=new CompositePayload(2);
         Payload retval=pl.remove();
-        assert retval == null && pl.size() == 0;
+        assert retval == null && pl.numPayloads() == 0;
 
         pl.add(p1).add(p2);
 
         retval=pl.remove();
         assert retval == p2;
-        assert pl.size() == 1;
+        assert pl.numPayloads() == 1;
 
         retval=pl.remove();
         assert retval == p1;
-        assert pl.size() == 0;
+        assert pl.numPayloads() == 0;
     }
 
 
     public void testRemoveAtHead() {
         CompositePayload pl=new CompositePayload(2);
         Payload retval=pl.removeAtHead();
-        assert retval == null && pl.size() == 0;
+        assert retval == null && pl.numPayloads() == 0;
 
         pl.add(p1).add(p2);
 
         retval=pl.removeAtHead();
         assert retval == p1;
-        assert pl.size() == 1;
+        assert pl.numPayloads() == 1;
 
         retval=pl.removeAtHead();
         assert retval == p2;
-        assert pl.size() == 0;
+        assert pl.numPayloads() == 0;
     }
 
     public void testGetInput() throws IOException {
@@ -136,6 +136,13 @@ public class CompositePayloadTest {
         assert pl.stream().count() == 3;
     }
 
+    public void testSize() {
+        CompositePayload pl=new CompositePayload();
+        assert pl.size() == 0;
+        pl=new CompositePayload(createPayloadArray(3, 20));
+        assert pl.size() == 60;
+    }
+
     public void testSerialization() throws Exception {
         CompositePayload pl=new CompositePayload(2);
         _testSerialization(pl);
@@ -158,7 +165,7 @@ public class CompositePayloadTest {
         pl2.readFrom(in);
 
         assert pl.getType() == pl2.getType();
-        assert pl.size() == pl2.size();
+        assert pl.numPayloads() == pl2.numPayloads();
         assert pl.serializedSize() == pl2.serializedSize();
     }
 

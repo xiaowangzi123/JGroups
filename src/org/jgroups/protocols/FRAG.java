@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
  * number is added to the messages as a header (and removed at the receiving side).
  * <p>
  * Contrary to {@link org.jgroups.protocols.FRAG2}, FRAG marshals the entire message (including the headers) into
- * a byte[] buffer and the fragments that buffer. Because {@link org.jgroups.Message#size()} is called rather than
+ * a byte[] buffer and the fragments that buffer. Because {@link org.jgroups.Message#serializedSize()} is called rather than
  * {@link org.jgroups.Message#getLength()}, and because of the overhead of marshalling, this will be slower than
  * FRAG2.
  * <p>
@@ -104,7 +104,7 @@ public class FRAG extends Protocol {
     }
 
     public Object down(Message msg) {
-        long size=msg.size();
+        long size=msg.serializedSize();
         num_sent_msgs++;
         if(size > frag_size) {
             if(log.isTraceEnabled()) {

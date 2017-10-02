@@ -42,6 +42,10 @@ public class ByteArrayPayload implements Payload {
         return new ByteArrayPayload(tmp, 0, tmp.length);
     }
 
+    public int size() {
+        return length;
+    }
+
     public int serializedSize() {
         return Global.INT_SIZE + length;
     }

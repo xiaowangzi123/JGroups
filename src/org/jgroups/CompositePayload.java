@@ -44,7 +44,7 @@ public class CompositePayload implements Payload, Iterable<Payload> {
 
 
     public byte             getType()                    {return Payload.COMPOSITE;}
-    public int              size()                       {return index;}
+    public int              numPayloads()                {return index;}
     public CompositePayload setFactory(PayloadFactory f) {this.factory=f; return this;}
 
     public InputStream getInput() {
@@ -120,8 +120,15 @@ public class CompositePayload implements Payload, Iterable<Payload> {
     }
 
     public Stream<Payload> stream() {
-        Spliterator<Payload> sp=Spliterators.spliterator(iterator(), size(), 0);
+        Spliterator<Payload> sp=Spliterators.spliterator(iterator(), numPayloads(), 0);
         return StreamSupport.stream(sp, false);
+    }
+
+    public int size() {
+        int total=0;
+        for(int i=0; i < index && payloads != null; i++)
+            total+=payloads[i].size();
+        return total;
     }
 
     public int serializedSize() {

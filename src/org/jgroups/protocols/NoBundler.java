@@ -29,7 +29,7 @@ public class NoBundler implements Bundler {
     public void stop()  {}
 
     public void send(Message msg) throws Exception {
-        ByteArrayDataOutputStream out=new ByteArrayDataOutputStream((int)(msg.size() + 10));
+        ByteArrayDataOutputStream out=new ByteArrayDataOutputStream((int)(msg.serializedSize() + 10));
         sendSingleMessage(msg, out);
     }
 
@@ -45,11 +45,11 @@ public class NoBundler implements Bundler {
         }
         catch(SocketException | SocketTimeoutException sock_ex) {
             log.trace(Util.getMessage("SendFailure"),
-                      transport.localAddress(), (dest == null? "cluster" : dest), msg.size(), sock_ex.toString(), msg.printHeaders());
+                      transport.localAddress(), (dest == null? "cluster" : dest), msg.serializedSize(), sock_ex.toString(), msg.printHeaders());
         }
         catch(Throwable e) {
             log.error(Util.getMessage("SendFailure"),
-                      transport.localAddress(), (dest == null? "cluster" : dest), msg.size(), e.toString(), msg.printHeaders());
+                      transport.localAddress(), (dest == null? "cluster" : dest), msg.serializedSize(), e.toString(), msg.printHeaders());
         }
     }
 

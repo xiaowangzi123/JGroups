@@ -81,7 +81,7 @@ public class HeadersResizeTest {
 
         protected synchronized void release() { // the next send() will send all queued messages
             for(Message msg: list)
-                addMessage(msg, msg.size());
+                addMessage(msg, msg.serializedSize());
             list.clear();
             queue=false;
             sendBundledMessages();

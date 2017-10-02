@@ -1752,7 +1752,7 @@ public class Util {
 
 
     public static Buffer messageToByteBuffer(Message msg) throws Exception {
-        ByteArrayDataOutputStream out=new ByteArrayDataOutputStream((int)msg.size()+1);
+        ByteArrayDataOutputStream out=new ByteArrayDataOutputStream((int)msg.serializedSize()+1);
 
         out.writeBoolean(msg != null);
         if(msg != null)

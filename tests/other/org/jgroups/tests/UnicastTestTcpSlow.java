@@ -125,7 +125,7 @@ public class UnicastTestTcpSlow {
         Message msg=new Message(null, buf.array());
         // msg.writeTo(output);
 
-        ByteArrayDataOutputStream dos=new ByteArrayDataOutputStream((int)(msg.size()));
+        ByteArrayDataOutputStream dos=new ByteArrayDataOutputStream((int)(msg.serializedSize()));
         byte flags=0;
         dos.writeShort(Version.version); // write the version
         if(msg.getDest() == null)

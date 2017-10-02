@@ -1191,11 +1191,11 @@ public abstract class TP extends Protocol implements DiagnosticsHandler.ProbeHan
         }
         catch(SocketException sock_ex) {
             log.trace(Util.getMessage("SendFailure"),
-                      local_addr, (dest == null? "cluster" : dest), msg.size(), sock_ex.toString(), msg.printHeaders());
+                      local_addr, (dest == null? "cluster" : dest), msg.serializedSize(), sock_ex.toString(), msg.printHeaders());
         }
         catch(Throwable e) {
             log.error(Util.getMessage("SendFailure"),
-                      local_addr, (dest == null? "cluster" : dest), msg.size(), e.toString(), msg.printHeaders());
+                      local_addr, (dest == null? "cluster" : dest), msg.serializedSize(), e.toString(), msg.printHeaders());
         }
     }
 

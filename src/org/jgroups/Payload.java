@@ -26,6 +26,10 @@ public interface Payload extends SizeStreamable {
 
     byte getType();
 
+    /** Returns the number of bytes in this payload (if feasible). If the payload has no byte[] array,
+     * this can be an estimate or {@link #serializedSize()} can be used instead */
+    int size();
+
     /** Returns a data input stream for reading from this payload */
     InputStream getInput();
 

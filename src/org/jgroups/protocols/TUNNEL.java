@@ -206,7 +206,7 @@ public class TUNNEL extends TP implements RouterStub.StubReceiver {
             throw new Exception("message " + msg + " doesn't have a transport header, cannot route it");
         String group=cluster_name != null? cluster_name.toString() : null;
 
-        ByteArrayDataOutputStream dos=new ByteArrayDataOutputStream((int)(msg.size() + 50));
+        ByteArrayDataOutputStream dos=new ByteArrayDataOutputStream((int)(msg.serializedSize() + 50));
         Util.writeMessage(msg, dos, dest == null);
 
         if(stats) {

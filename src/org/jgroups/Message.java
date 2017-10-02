@@ -21,18 +21,12 @@ import java.util.function.Supplier;
  * @since 2.0
  * @author Bela Ban
  */
-public class Message implements Streamable, Constructable<Message> {
+public class Message implements SizeStreamable, Constructable<Message> {
     protected Address           dest_addr;
     protected Address           src_addr;
 
     /** The payload */
-    protected byte[]            buf;
-
-    /** The index into the payload (usually 0) */
-    protected int               offset;
-
-    /** The number of bytes in the buffer (usually buf.length is buf not equal to null). */
-    protected int               length;
+    protected Payload           payload;
 
     /** All headers are placed here */
     protected volatile Header[] headers;
@@ -168,10 +162,18 @@ public class Message implements Streamable, Constructable<Message> {
     public Address src()                     {return src_addr;}
     public Message setSrc(Address new_src)   {src_addr=new_src; return this;}
     public Message src(Address new_src)      {src_addr=new_src; return this;}
-    public int     getOffset()               {return offset;}
-    public int     offset()                  {return offset;}
-    public int     getLength()               {return length;}
-    public int     length()                  {return length;}
+    public Payload getPayload()              {return payload;}
+    public Message setPayload(Payload pl)    {this.payload=pl; return this;}
+
+    @Deprecated
+    public int     getOffset()               {return _offset();}
+    @Deprecated
+    public int     offset()                  {return _offset();}
+
+
+    /** Returns the number of bytes of the payload, or an approximation if the payload does not have a byte[] array */
+    public int     getLength()               {return payload != null? payload.size() : 0;}
+    public int     length()                  {return getLength();}
 
 
     /**
@@ -180,8 +182,8 @@ public class Message implements Streamable, Constructable<Message> {
      * is simply a reference to the old buffer.<br/>
      * Even if offset and length are used: we return the <em>entire</em> buffer, not a subset.
      */
-    public byte[]  getRawBuffer()            {return buf;}
-    public byte[]  rawBuffer()               {return buf;}
+    public byte[]  getRawBuffer()            {return _array();}
+    public byte[]  rawBuffer()               {return _array();}
     public byte[]  buffer()                  {return getBuffer();}
     public Buffer  buffer2()                 {return getBuffer2();}
     public Message buffer(byte[] b)          {return setBuffer(b);}
@@ -193,23 +195,14 @@ public class Message implements Streamable, Constructable<Message> {
    /**
     * Returns a copy of the buffer if offset and length are used, otherwise a reference.
     * @return byte array with a copy of the buffer.
+    * @deprecated Use {@link #getPayload()} instead
     */
-    public byte[] getBuffer() {
-        if(buf == null)
-            return null;
-        if(offset == 0 && length == buf.length)
-            return buf;
-        else {
-            byte[] retval=new byte[length];
-            System.arraycopy(buf, offset, retval, 0, length);
-            return retval;
-        }
+    @Deprecated public byte[] getBuffer() {
+        return _array();
     }
 
     public Buffer getBuffer2() {
-        if(buf == null)
-            return null;
-        return new Buffer(buf, offset, length);
+        return _array2();
     }
 
     /**
@@ -217,15 +210,12 @@ public class Message implements Streamable, Constructable<Message> {
      * Note that the byte[] buffer passed as argument must not be modified. Reason: if we retransmit the
      * message, it would still have a ref to the original byte[] buffer passed in as argument, and so we would
      * retransmit a changed byte[] buffer !
+     * @deprecated Use {@link #setPayload(Payload)} instead
      */
+    @Deprecated
     public Message setBuffer(byte[] b) {
-        buf=b;
-        if(buf != null) {
-            offset=0;
-            length=buf.length;
-        }
-        else
-            offset=length=0;
+        if(b != null)
+            setPayload(new ByteArrayPayload(b));
         return this;
     }
 
@@ -240,19 +230,12 @@ public class Message implements Streamable, Constructable<Message> {
      * @param b The reference to a given buffer. If null, we'll reset the buffer to null
      * @param offset The initial position
      * @param length The number of bytes
+     * @deprecated Use {@link #setPayload(Payload)} instead
      */
+    @Deprecated
     public Message setBuffer(byte[] b, int offset, int length) {
-        buf=b;
-        if(buf != null) {
-            if(offset < 0 || offset > buf.length)
-                throw new ArrayIndexOutOfBoundsException(offset);
-            if((offset + length) > buf.length)
-                throw new ArrayIndexOutOfBoundsException((offset+length));
-            this.offset=offset;
-            this.length=length;
-        }
-        else
-            this.offset=this.length=0;
+        if(b != null)
+            setPayload(new ByteArrayPayload(b, offset, length));
         return this;
     }
 
@@ -260,14 +243,13 @@ public class Message implements Streamable, Constructable<Message> {
      * Sets the buffer<p/>
      * Note that the byte[] buffer passed as argument must not be modified. Reason: if we retransmit the
      * message, it would still have a ref to the original byte[] buffer passed in as argument, and so we would
-     * retransmit a changed byte[] buffer !
+     * retransmit a changed byte[] buffer!
+     * @deprecated Use {@link #setPayload(Payload)} instead
      */
+    @Deprecated
     public Message setBuffer(Buffer buf) {
-        if(buf != null) {
-            this.buf=buf.getBuf();
-            this.offset=buf.getOffset();
-            this.length=buf.getLength();
-        }
+        if(buf != null)
+            setPayload(new ByteArrayPayload(buf.getBuf(), buf.getOffset(), buf.getLength()));
         return this;
     }
 
@@ -316,12 +298,19 @@ public class Message implements Streamable, Constructable<Message> {
      * the webapp's classloader, resulting in a ClassCastException. The recommended way is for the application to use
      * their own serialization and only pass byte[] buffer to JGroups.<p/>
      * As of 3.5, a classloader can be passed in. It will be used first to find a class, before contacting
-     * the other classloaders in the list. If null, the default list of classloaders will be used.
+     * the other classloaders in the list. If null, the default list of classloaders will be used.<br/>
+     * A better way to extract the object is to call {@link #getPayload()} and then de-serialize the buffer into an object
      * @return the object
+     * @deprecated Use {@link #getPayload()} instead and extract the object from the payload, e.g.
+     * <pre>
+     *    ByteArrayPayload pl=(ByteArrayPayload)msg.getPayload(); // we know the payload is of the given type
+     *    Object obj=Util.objectFromByteBuffer(pl.getBuf(), pl.getOffset(), pl.getLength());
+     * </pre>
      */
+    @Deprecated
     public <T extends Object> T getObject(ClassLoader loader) {
         try {
-            return Util.objectFromByteBuffer(buf, offset, length, loader);
+            return Util.objectFromByteBuffer(_array(), _offset(), _length(), loader);
         }
         catch(Exception ex) {
             throw new IllegalArgumentException(ex);
@@ -518,8 +507,8 @@ public class Message implements Streamable, Constructable<Message> {
         retval.flags=tmp_flags;
         retval.transient_flags=tmp_tflags;
 
-        if(copy_buffer && buf != null)
-            retval.setBuffer(buf, offset, length);
+        if(copy_buffer && payload != null)
+            retval.setPayload(payload.copy());
 
         //noinspection NonAtomicOperationOnVolatileField
         retval.headers=copy_headers && headers != null? Headers.copy(this.headers) : createHeaders(Util.DEFAULT_HEADERS);
@@ -581,8 +570,8 @@ public class Message implements Streamable, Constructable<Message> {
             ret.append(" (").append(size).append(" headers)");
 
         ret.append(", size=");
-        if(buf != null && length > 0)
-            ret.append(length);
+        if(payload != null)
+            ret.append(payload.size());
         else
             ret.append('0');
         ret.append(" bytes");
@@ -620,7 +609,7 @@ public class Message implements Streamable, Constructable<Message> {
         if(src_addr != null)
             leading=Util.setFlag(leading, SRC_SET);
 
-        if(buf != null)
+        if(payload != null)
             leading=Util.setFlag(leading, BUF_SET);
 
         // 1. write the leading byte first
@@ -651,9 +640,9 @@ public class Message implements Streamable, Constructable<Message> {
         }
 
         // 6. buf
-        if(buf != null) {
-            out.writeInt(length);
-            out.write(buf, offset, length);
+        if(payload != null) {
+            out.writeByte(payload.getType());
+            payload.writeTo(out);
         }
     }
 
@@ -674,7 +663,7 @@ public class Message implements Streamable, Constructable<Message> {
         if(write_src_addr)
             leading=Util.setFlag(leading, SRC_SET);
 
-        if(buf != null)
+        if(payload != null)
             leading=Util.setFlag(leading, BUF_SET);
 
         // 1. write the leading byte first
@@ -704,9 +693,9 @@ public class Message implements Streamable, Constructable<Message> {
         }
 
         // 6. buf
-        if(buf != null) {
-            out.writeInt(length);
-            out.write(buf, offset, length);
+        if(payload != null) {
+            out.writeByte(payload.getType());
+            payload.writeTo(out);
         }
     }
 
@@ -738,17 +727,13 @@ public class Message implements Streamable, Constructable<Message> {
 
         // 6. buf
         if(Util.isFlagSet(leading, BUF_SET)) {
-            len=in.readInt();
-            buf=new byte[len];
-            in.readFully(buf, 0, len);
-            length=len;
+            byte type=in.readByte();
+            payload=Payload.create(type, null);
+            payload.readFrom(in);
         }
     }
 
-
-    /** Reads the message's contents from an input stream, but skips the buffer and instead returns the
-     * position (offset) at which the buffer starts */
-    public int readFromSkipPayload(ByteArrayDataInputStream in) throws Exception {
+    public void readFrom(DataInput in, PayloadFactory factory) throws Exception {
 
         // 1. read the leading byte first
         byte leading=in.readByte();
@@ -766,7 +751,7 @@ public class Message implements Streamable, Constructable<Message> {
 
         // 5. headers
         int len=in.readShort();
-        headers=createHeaders(len);
+        this.headers=createHeaders(len);
         for(int i=0; i < len; i++) {
             short id=in.readShort();
             Header hdr=readHeader(in).setProtId(id);
@@ -774,14 +759,17 @@ public class Message implements Streamable, Constructable<Message> {
         }
 
         // 6. buf
-        if(!Util.isFlagSet(leading, BUF_SET))
-            return -1;
-
-        length=in.readInt();
-        return in.position();
+        if(Util.isFlagSet(leading, BUF_SET)) {
+            byte type=in.readByte();
+            payload=Payload.create(type, factory);
+            if(payload instanceof CompositePayload)
+                ((CompositePayload)payload).setFactory(factory);
+            payload.readFrom(in);
+        }
     }
 
     /* --------------------------------- End of Interface Streamable ----------------------------- */
+
 
     /**
      * Returns the exact size of the marshalled message. Uses method size() of each header to compute
@@ -793,9 +781,9 @@ public class Message implements Streamable, Constructable<Message> {
      * might lead to an int overflow, that's why we use a long.
      * @return The number of bytes for the marshalled message
      */
-    public long size() {
-        long retval=(long)Global.BYTE_SIZE   // leading byte
-                + Global.SHORT_SIZE;   // flags
+    public int serializedSize() {
+        int retval=Global.BYTE_SIZE // leading byte
+          + Global.SHORT_SIZE;      // flags
         if(dest_addr != null)
             retval+=Util.size(dest_addr);
         if(src_addr != null)
@@ -804,9 +792,9 @@ public class Message implements Streamable, Constructable<Message> {
         retval+=Global.SHORT_SIZE;  // number of headers
         retval+=Headers.marshalledSize(this.headers);
 
-        if(buf != null)
-            retval+=Global.INT_SIZE // length (integer)
-              + length;       // number of bytes in the buffer
+        if(payload != null)
+            retval+=Global.BYTE_SIZE // type of payload
+              + payload.serializedSize();
         return retval;
     }
 
@@ -868,7 +856,51 @@ public class Message implements Streamable, Constructable<Message> {
         return size > 0? new Header[size] : new Header[3];
     }
 
-    /* ------------------------------- End of Private methods ---------------------------- */
+    /** Grabs the byte[] array of the payload *if* possible, e.g. ByteArrayBayload or NioPayload, else throws an exception
+     * @deprecated Use {@link #getPayload()} instead
+     */
+    @Deprecated protected byte[] _array() {
+        if(payload == null)
+            return null;
+        if(payload instanceof ByteArrayPayload)
+            return ((ByteArrayPayload)payload).getBuf();
+        throw new IllegalStateException("payload has no array");
+    }
 
+    /** Returns of the payload (as a Buffer) *if* possible, e.g. ByteArrayBayload or NioPayload, else throws an exception
+     * @deprecated Use {@link #getPayload()} instead
+     */
+    @Deprecated protected Buffer _array2() {
+        if(payload == null)
+            return null;
+        if(payload instanceof ByteArrayPayload) {
+            ByteArrayPayload pl=((ByteArrayPayload)payload);
+            return new Buffer(pl.getBuf(), pl.getOffset(), pl.getLength());
+        }
+        throw new IllegalStateException("payload has no array");
+    }
 
+    /** Grabs the byte[] array of the payload *if* possible and returns its offset, e.g. ByteArrayBayload or NioPayload,
+     * else throws an exception
+     * @deprecated Use {@link #getPayload()} instead, downcast to (e.g.) ByteArrayPayload and call getOffset() on it
+     */
+    @Deprecated protected int _offset() {
+        if(payload == null)
+            return 0;
+        if(payload instanceof ByteArrayPayload)
+            return ((ByteArrayPayload)payload).getOffset();
+        throw new IllegalStateException("payload has no array");
+    }
+
+    /** Grabs the byte[] array of the payload *if* possible and returns its length, e.g. ByteArrayBayload or NioPayload,
+     * else throws an exception
+     * @deprecated Use {@link #getPayload()} instead, downcast to (e.g.) ByteArrayPayload and call getLength() on it
+     */
+    @Deprecated protected int _length() {
+        if(payload == null)
+            return 0;
+        if(payload instanceof ByteArrayPayload)
+            return ((ByteArrayPayload)payload).getLength();
+        throw new IllegalStateException("payload has no array");
+    }
 }

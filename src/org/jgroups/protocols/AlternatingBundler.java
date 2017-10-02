@@ -45,7 +45,7 @@ public class AlternatingBundler extends TransferQueueBundler implements Diagnost
             try {
                 if((msg=queue.take()) == null) // block until first message is available
                     continue;
-                long size=msg.size();
+                long size=msg.serializedSize();
                 if(count + size >= transport.getMaxBundleSize()) {
                     num_sends_because_full_queue++;
                     fill_count.add(count);
@@ -60,7 +60,7 @@ public class AlternatingBundler extends TransferQueueBundler implements Diagnost
                     msg=queue.poll();
                     if(msg == null)
                         break;
-                    size=msg.size();
+                    size=msg.serializedSize();
                 }
                 _sendBundledMessages();
             }

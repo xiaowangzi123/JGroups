@@ -103,7 +103,7 @@ public class TransferQueueBundler extends BaseBundler implements Runnable {
             try {
                 if((msg=queue.take()) == null)
                     continue;
-                long size=msg.size();
+                long size=msg.serializedSize();
                 if(count + size >= transport.getMaxBundleSize()) {
                     num_sends_because_full_queue++;
                     fill_count.add(count);
@@ -117,7 +117,7 @@ public class TransferQueueBundler extends BaseBundler implements Runnable {
                         break;
                     for(int i=0; i < remove_queue.size(); i++) {
                         msg=remove_queue.get(i);
-                        size=msg.size();
+                        size=msg.serializedSize();
                         if(count + size >= transport.getMaxBundleSize()) {
                             num_sends_because_full_queue++;
                             fill_count.add(count);

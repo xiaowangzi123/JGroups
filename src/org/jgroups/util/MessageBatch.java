@@ -38,7 +38,7 @@ public class MessageBatch implements Iterable<Message> {
 
     protected static final int INCR=5; // number of elements to add when resizing
     protected static final     ToIntBiFunction<Message,MessageBatch>  length_visitor=(msg, batch) -> msg != null? msg.getLength() : 0;
-    protected static final     ToLongBiFunction<Message,MessageBatch> total_size_visitor=(msg, batch) -> msg != null? msg.size() : 0;
+    protected static final     ToLongBiFunction<Message,MessageBatch> total_size_visitor=(msg, batch) -> msg != null? msg.serializedSize() : 0;
 
 
     public MessageBatch(int capacity) {
@@ -361,7 +361,7 @@ public class MessageBatch implements Iterable<Message> {
     }
 
 
-    /** Returns the size of the message batch (by calling {@link org.jgroups.Message#size()} on all messages) */
+    /** Returns the size of the message batch (by calling {@link org.jgroups.Message#serializedSize()} on all messages) */
     public long totalSize() {
         long retval=0;
         for(int i=0; i < index; i++)

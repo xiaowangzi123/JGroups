@@ -394,7 +394,7 @@ public class MessageBatchTest {
         MessageBatch batch=new MessageBatch(msgs);
         long total_size=0;
         for(Message msg: msgs)
-            total_size+=msg.size();
+            total_size+=msg.serializedSize();
         System.out.println("total size=" + batch.totalSize());
         assert batch.totalSize() == total_size;
     }
@@ -455,7 +455,7 @@ public class MessageBatchTest {
         int total_size=batch.stream().map(Message::getLength).reduce(0, (l, r) -> l+r);
         assert total_size == 0;
 
-        List<Long> msg_sizes=batch.stream().map(Message::size).collect(Collectors.toList());
+        List<Integer> msg_sizes=batch.stream().map(Message::serializedSize).collect(Collectors.toList());
         System.out.println("msg_sizes = " + msg_sizes);
         assert msg_sizes.size() == batch.stream().count();
     }

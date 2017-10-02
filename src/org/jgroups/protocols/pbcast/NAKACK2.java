@@ -1444,7 +1444,7 @@ public class NAKACK2 extends Protocol implements DiagnosticsHandler.ProbeHandler
             if(el == null)
                 return size;
             else
-                return size + (include_headers? el.size() : el.getLength());
+                return size + (include_headers? el.serializedSize() : el.getLength());
         }, (l,r) -> l);
     }
 

@@ -85,7 +85,7 @@ public class RingBufferBundlerLockless extends BaseBundler {
         }
 
         buf[tmp_index]=msg;
-        long acc_bytes=accumulated_bytes.addAndGet(msg.size());
+        long acc_bytes=accumulated_bytes.addAndGet(msg.serializedSize());
         int current_threads=num_threads.decrementAndGet();
         boolean no_other_threads=current_threads == 0;
 
@@ -220,7 +220,7 @@ public class RingBufferBundlerLockless extends BaseBundler {
         while(available_msgs > 0) {
             Message msg=buf[start_index];
             if(msg != null && Objects.equals(dest, msg.dest())) {
-                long msg_size=msg.size();
+                long msg_size=msg.serializedSize();
                 if(bytes + msg_size > max_bundle_size)
                     break;
                 bytes+=msg_size;

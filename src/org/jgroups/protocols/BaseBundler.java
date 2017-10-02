@@ -54,8 +54,7 @@ public abstract class BaseBundler implements Bundler {
     public int size() {
         lock.lock();
         try {
-            long num=msgs.values().stream().flatMap(Collection::stream).map(Message::size).reduce(0L, (a, b) -> a + b);
-            return (int)num;
+            return msgs.values().stream().flatMap(Collection::stream).map(Message::serializedSize).reduce(0, (a, b) -> a + b);
         }
         finally {
             lock.unlock();
@@ -101,11 +100,11 @@ public abstract class BaseBundler implements Bundler {
         }
         catch(SocketException | SocketTimeoutException sock_ex) {
             log.trace(Util.getMessage("SendFailure"),
-                      transport.localAddress(), (dest == null? "cluster" : dest), msg.size(), sock_ex.toString(), msg.printHeaders());
+                      transport.localAddress(), (dest == null? "cluster" : dest), msg.serializedSize(), sock_ex.toString(), msg.printHeaders());
         }
         catch(Throwable e) {
             log.error(Util.getMessage("SendFailure"),
-                      transport.localAddress(), (dest == null? "cluster" : dest), msg.size(), e.toString(), msg.printHeaders());
+                      transport.localAddress(), (dest == null? "cluster" : dest), msg.serializedSize(), e.toString(), msg.printHeaders());
         }
     }
 
