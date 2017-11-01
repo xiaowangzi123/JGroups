@@ -12,9 +12,10 @@ import java.util.function.Supplier;
  * @author Bela Ban
  */
 public class FragHeader extends Header {
-    public long id;
-    public int  frag_id;
-    public int  num_frags;
+    public long    id;
+    public int     frag_id;
+    public int     num_frags;
+    public boolean needs_deserialization; // true if byte[] array of a fragment needs to be de-serialized into a payload
 
 
     public FragHeader() {
@@ -25,6 +26,9 @@ public class FragHeader extends Header {
         this.frag_id=frag_id;
         this.num_frags=num_frags;
     }
+
+    public boolean    needsDeserialization()             {return needs_deserialization;}
+    public FragHeader needsDeserialization(boolean flag) {needs_deserialization=flag; return this;}
 
     public short getMagicId() {return 52;}
 
@@ -41,16 +45,18 @@ public class FragHeader extends Header {
         Bits.writeLong(id,out);
         Bits.writeInt(frag_id, out);
         Bits.writeInt(num_frags, out);
+        out.writeBoolean(needs_deserialization);
     }
 
     public int serializedSize() {
-        return Bits.size(id) + Bits.size(frag_id) + Bits.size(num_frags);
+        return Bits.size(id) + Bits.size(frag_id) + Bits.size(num_frags) +1;
     }
 
     public void readFrom(DataInput in) throws Exception {
         id=Bits.readLong(in);
         frag_id=Bits.readInt(in);
         num_frags=Bits.readInt(in);
+        needs_deserialization=in.readBoolean();
     }
 
 }

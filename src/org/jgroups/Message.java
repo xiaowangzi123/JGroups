@@ -154,26 +154,26 @@ public class Message implements SizeStreamable, Constructable<Message> {
         return Message::new;
     }
 
-    public Address getDest()                 {return dest_addr;}
-    public Address dest()                    {return dest_addr;}
-    public Message setDest(Address new_dest) {dest_addr=new_dest; return this;}
-    public Message dest(Address new_dest)    {dest_addr=new_dest; return this;}
-    public Address getSrc()                  {return src_addr;}
-    public Address src()                     {return src_addr;}
-    public Message setSrc(Address new_src)   {src_addr=new_src; return this;}
-    public Message src(Address new_src)      {src_addr=new_src; return this;}
-    public Payload getPayload()              {return payload;}
-    public Message setPayload(Payload pl)    {this.payload=pl; return this;}
+    public Address getDest()                  {return dest_addr;}
+    public Address dest()                     {return dest_addr;}
+    public Message setDest(Address new_dest)  {dest_addr=new_dest; return this;}
+    public Message dest(Address new_dest)     {dest_addr=new_dest; return this;}
+    public Address getSrc()                   {return src_addr;}
+    public Address src()                      {return src_addr;}
+    public Message setSrc(Address new_src)    {src_addr=new_src; return this;}
+    public Message src(Address new_src)       {src_addr=new_src; return this;}
+    public <P extends Payload> P getPayload() {return (P)payload;}
+    public Message setPayload(Payload pl)     {this.payload=pl; return this;}
 
     @Deprecated
-    public int     getOffset()               {return _offset();}
+    public int     getOffset()                {return _offset();}
     @Deprecated
-    public int     offset()                  {return _offset();}
+    public int     offset()                   {return _offset();}
 
 
     /** Returns the number of bytes of the payload, or an approximation if the payload does not have a byte[] array */
-    public int     getLength()               {return payload != null? payload.size() : 0;}
-    public int     length()                  {return getLength();}
+    public int     getLength()                {return payload != null? payload.size() : 0;}
+    public int     length()                   {return getLength();}
 
 
     /**
@@ -182,14 +182,14 @@ public class Message implements SizeStreamable, Constructable<Message> {
      * is simply a reference to the old buffer.<br/>
      * Even if offset and length are used: we return the <em>entire</em> buffer, not a subset.
      */
-    public byte[]  getRawBuffer()            {return _array();}
-    public byte[]  rawBuffer()               {return _array();}
-    public byte[]  buffer()                  {return getBuffer();}
-    public Buffer  buffer2()                 {return getBuffer2();}
-    public Message buffer(byte[] b)          {return setBuffer(b);}
-    public Message buffer(Buffer b)          {return setBuffer(b);}
-    public int     getNumHeaders()           {return Headers.size(this.headers);}
-    public int     numHeaders()              {return Headers.size(this.headers);}
+    public byte[]  getRawBuffer()             {return _array();}
+    public byte[]  rawBuffer()                {return _array();}
+    public byte[]  buffer()                   {return getBuffer();}
+    public Buffer  buffer2()                  {return getBuffer2();}
+    public Message buffer(byte[] b)           {return setBuffer(b);}
+    public Message buffer(Buffer b)           {return setBuffer(b);}
+    public int     getNumHeaders()            {return Headers.size(this.headers);}
+    public int     numHeaders()               {return Headers.size(this.headers);}
 
 
    /**
@@ -274,10 +274,14 @@ public class Message implements SizeStreamable, Constructable<Message> {
      */
     public Message setObject(Object obj) {
         if(obj == null) return this;
+        if(obj instanceof Payload)
+            return setPayload((Payload)obj);
         if(obj instanceof byte[])
-            return setBuffer((byte[])obj);
-        if(obj instanceof Buffer)
-            return setBuffer((Buffer)obj);
+            return setPayload(new ByteArrayPayload((byte[])obj));
+        if(obj instanceof Buffer) {
+            Buffer buf=(Buffer)obj;
+            return setPayload(new ByteArrayPayload(buf.getBuf(), buf.getOffset(), buf.getLength()));
+        }
         try {
             return setBuffer(Util.objectToByteBuffer(obj));
         }
@@ -310,7 +314,7 @@ public class Message implements SizeStreamable, Constructable<Message> {
     @Deprecated
     public <T extends Object> T getObject(ClassLoader loader) {
         try {
-            return Util.objectFromByteBuffer(_array(), _offset(), _length(), loader);
+            return Util.objectFromByteBuffer(_array(), _offset(), payload.size(), loader);
         }
         catch(Exception ex) {
             throw new IllegalArgumentException(ex);
@@ -860,24 +864,14 @@ public class Message implements SizeStreamable, Constructable<Message> {
      * @deprecated Use {@link #getPayload()} instead
      */
     @Deprecated protected byte[] _array() {
-        if(payload == null)
-            return null;
-        if(payload instanceof ByteArrayPayload)
-            return ((ByteArrayPayload)payload).getBuf();
-        throw new IllegalStateException("payload has no array");
+        return payload == null? null : payload.array();
     }
 
     /** Returns of the payload (as a Buffer) *if* possible, e.g. ByteArrayBayload or NioPayload, else throws an exception
      * @deprecated Use {@link #getPayload()} instead
      */
     @Deprecated protected Buffer _array2() {
-        if(payload == null)
-            return null;
-        if(payload instanceof ByteArrayPayload) {
-            ByteArrayPayload pl=((ByteArrayPayload)payload);
-            return new Buffer(pl.getBuf(), pl.getOffset(), pl.getLength());
-        }
-        throw new IllegalStateException("payload has no array");
+        return payload == null? null : new Buffer(payload.array(), payload.arrayOffset(), payload.size());
     }
 
     /** Grabs the byte[] array of the payload *if* possible and returns its offset, e.g. ByteArrayBayload or NioPayload,
@@ -885,22 +879,7 @@ public class Message implements SizeStreamable, Constructable<Message> {
      * @deprecated Use {@link #getPayload()} instead, downcast to (e.g.) ByteArrayPayload and call getOffset() on it
      */
     @Deprecated protected int _offset() {
-        if(payload == null)
-            return 0;
-        if(payload instanceof ByteArrayPayload)
-            return ((ByteArrayPayload)payload).getOffset();
-        throw new IllegalStateException("payload has no array");
+        return payload == null? 0 : payload.arrayOffset();
     }
 
-    /** Grabs the byte[] array of the payload *if* possible and returns its length, e.g. ByteArrayBayload or NioPayload,
-     * else throws an exception
-     * @deprecated Use {@link #getPayload()} instead, downcast to (e.g.) ByteArrayPayload and call getLength() on it
-     */
-    @Deprecated protected int _length() {
-        if(payload == null)
-            return 0;
-        if(payload instanceof ByteArrayPayload)
-            return ((ByteArrayPayload)payload).getLength();
-        throw new IllegalStateException("payload has no array");
-    }
 }

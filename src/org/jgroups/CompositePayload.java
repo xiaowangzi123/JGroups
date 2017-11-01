@@ -21,6 +21,7 @@ public class CompositePayload implements Payload, Iterable<Payload> {
     protected Payload[]      payloads;
     protected int            index; // points to the next position at which to add a payload
     protected PayloadFactory factory; // used to create payloads (if set)
+    protected static final String NO_ARRAY_MSG=String.format("%s has no backing byte[] array", CompositePayload.class.getSimpleName());
 
     public CompositePayload() {
     }
@@ -46,10 +47,10 @@ public class CompositePayload implements Payload, Iterable<Payload> {
     public byte             getType()                    {return Payload.COMPOSITE;}
     public int              numPayloads()                {return index;}
     public CompositePayload setFactory(PayloadFactory f) {this.factory=f; return this;}
-
-    public InputStream getInput() {
-        return new SequenceInputStream(new PayloadEnumeration());
-    }
+    public boolean          hasArray()                   {return false;}
+    public int              arrayOffset()                {throw new UnsupportedOperationException(NO_ARRAY_MSG);}
+    public byte[]           array()                      {throw new UnsupportedOperationException(NO_ARRAY_MSG);}
+    public InputStream      getInput()                   {return new SequenceInputStream(new PayloadEnumeration());}
 
     // public Enumeration<InputStream> getEnumerator() {
     //    return new PayloadEnumeration();

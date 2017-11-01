@@ -25,11 +25,14 @@ public class ByteArrayPayload implements Payload {
         set(buf, offset, length);
     }
 
-    public byte        getType()   {return Payload.BYTE_ARRAY;}
-    public byte[]      getBuf()    {return buf;}
-    public int         getOffset() {return offset;}
-    public int         getLength() {return length;}
-    public InputStream getInput()  {return new ByteArrayInputStream(buf, offset, length);}
+    public byte        getType()     {return Payload.BYTE_ARRAY;}
+    public byte[]      getBuf()      {return buf;}
+    public int         getOffset()   {return offset;}
+    public int         getLength()   {return length;}
+    public InputStream getInput()    {return new ByteArrayInputStream(buf, offset, length);}
+    public boolean     hasArray()    {return true;}
+    public int         arrayOffset() {return offset;}
+    public byte[]      array()       {return buf;}
 
     /** Returns a ref to the same buffer if offset is 0 and the length is the same as the underlying byte[] array,
      *  otherwise a copy of the subrange is made

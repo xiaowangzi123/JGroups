@@ -1,18 +1,12 @@
 package org.jgroups.protocols;
 
-import org.jgroups.Address;
-import org.jgroups.Event;
-import org.jgroups.Message;
-import org.jgroups.View;
+import org.jgroups.*;
 import org.jgroups.annotations.MBean;
 import org.jgroups.annotations.ManagedAttribute;
 import org.jgroups.annotations.ManagedOperation;
 import org.jgroups.annotations.Property;
 import org.jgroups.stack.Protocol;
-import org.jgroups.util.AverageMinMax;
-import org.jgroups.util.MessageBatch;
-import org.jgroups.util.Range;
-import org.jgroups.util.Util;
+import org.jgroups.util.*;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -68,6 +62,7 @@ public class FRAG2 extends Protocol {
     protected final List<Address> members=new ArrayList<>(11);
 
     protected Address             local_addr;
+    protected PayloadFactory      payload_factory;
 
     @ManagedAttribute(description="Number of sent fragments")
     protected LongAdder           num_frags_sent=new LongAdder();
@@ -102,12 +97,12 @@ public class FRAG2 extends Protocol {
             throw new Exception("frag_size=" + old_frag_size + ", new frag_size=" + frag_size + ": new frag_size is invalid");
 
         TP transport=getTransport();
-        if(transport != null) {
-            int max_bundle_size=transport.getMaxBundleSize();
-            if(frag_size >= max_bundle_size)
-                throw new IllegalArgumentException("frag_size (" + frag_size + ") has to be < TP.max_bundle_size (" +
-                                                     max_bundle_size + ")");
-        }
+        int max_bundle_size=transport.getMaxBundleSize();
+        if(frag_size >= max_bundle_size)
+            throw new IllegalArgumentException("frag_size (" + frag_size + ") has to be < TP.max_bundle_size (" +
+                                                 max_bundle_size + ")");
+        if((payload_factory=transport.getPayloadFactory()) == null)
+            throw new IllegalStateException("failed to retrieve payload factory from transport");
 
         Map<String,Object> info=new HashMap<>(1);
         info.put("frag_size", frag_size);
@@ -235,8 +230,13 @@ public class FRAG2 extends Protocol {
      */
     protected void fragment(Message msg) {
         try {
-            byte[] buffer=msg.getRawBuffer();
-            final List<Range> fragments=Util.computeFragOffsets(msg.getOffset(), msg.getLength(), frag_size);
+            Payload pl=msg.getPayload();
+            boolean serialize=!pl.hasArray();
+            Buffer tmp=null;
+            byte[] buffer=serialize? (tmp=pl.serialize()).getBuf() : pl.array();
+            int offset=pl.hasArray()? pl.arrayOffset() : 0;
+            int length=serialize? tmp.getLength() : msg.getLength();
+            final List<Range> fragments=Util.computeFragOffsets(offset, length, frag_size);
             int num_frags=fragments.size();
             num_frags_sent.add(num_frags);
 
@@ -251,8 +251,8 @@ public class FRAG2 extends Protocol {
                 Range r=fragments.get(i);
                 // don't copy the buffer, only src, dest and headers. Only copy the headers one time !
                 Message frag_msg=msg.copy(false, i == 0);
-                frag_msg.setBuffer(buffer, (int)r.low, (int)r.high);
-                FragHeader hdr=new FragHeader(frag_id, i, num_frags);
+                frag_msg.setPayload(new ByteArrayPayload(buffer, (int)r.low, (int)r.high));
+                FragHeader hdr=new FragHeader(frag_id, i, num_frags).needsDeserialization(serialize);
                 frag_msg.putHeader(this.id, hdr);
                 down_prot.down(frag_msg);
             }
@@ -285,7 +285,7 @@ public class FRAG2 extends Protocol {
 
         FragEntry entry=frag_table.get(hdr.id);
         if(entry == null) {
-            entry=new FragEntry(hdr.num_frags);
+            entry=new FragEntry(hdr.num_frags, hdr.needs_deserialization, payload_factory);
             FragEntry tmp=frag_table.putIfAbsent(hdr.id, entry);
             if(tmp != null)
                 entry=tmp;
@@ -295,17 +295,23 @@ public class FRAG2 extends Protocol {
         try {
             entry.set(hdr.frag_id, msg);
             if(entry.isComplete()) {
-                assembled_msg=entry.assembleMessage();
-                frag_table.remove(hdr.id);
-                if(log.isTraceEnabled())
-                    log.trace("%s: unfragmented message from %s (size=%d) from %d fragments",
-                              local_addr, sender, assembled_msg.getLength(), entry.number_of_frags_recvd);
+                try {
+                    assembled_msg=entry.assembleMessage();
+                    if(log.isTraceEnabled())
+                        log.trace("%s: unfragmented message from %s (size=%d) from %d fragments",
+                                  local_addr, sender, assembled_msg.getLength(), entry.number_of_frags_recvd);
+                }
+                catch(Throwable t) {
+                    log.error("failed assembling message", t);
+                }
+                finally {
+                    frag_table.remove(hdr.id);
+                }
             }
         }
         finally {
             entry.unlock();
         }
-
         return assembled_msg;
     }
 
@@ -319,20 +325,22 @@ public class FRAG2 extends Protocol {
      * All methods are unsynchronized, use getLock() to obtain a lock for concurrent access.
      */
     protected static class FragEntry {
-        // each fragment is a byte buffer
-        final Message fragments[];
-        //the number of fragments we have received
-        int number_of_frags_recvd=0;
-
-        protected final Lock lock=new ReentrantLock();
+        protected final Message        fragments[];
+        protected int                  number_of_frags_recvd;
+        protected final Lock           lock=new ReentrantLock();
+        protected final boolean        needs_deserialization;
+        protected final PayloadFactory payload_factory;
 
 
         /**
          * Creates a new entry
          * @param tot_frags the number of fragments to expect for this message
+         * @param payload_factory
          */
-        protected FragEntry(int tot_frags) {
+        protected FragEntry(int tot_frags, boolean needs_deserialization, PayloadFactory payload_factory) {
             fragments=new Message[tot_frags];
+            this.needs_deserialization=needs_deserialization;
+            this.payload_factory=payload_factory;
         }
 
         /** Use to synchronize on FragEntry */
@@ -377,36 +385,37 @@ public class FRAG2 extends Protocol {
         }
 
         /**
-         * Assembles all the fragments into one buffer. Takes all Messages, and combines their buffers into one
-         * buffer.
+         * Assembles all the fragments into one payload.
          * This method does not check if the fragmentation is complete (use {@link #isComplete()} to verify
          * before calling this method)
-         * @return the complete message in one buffer
-         *
+         * @return the complete message in one payload
          */
-        protected Message assembleMessage() {
-            Message retval;
-            byte[]  combined_buffer, tmp;
-            int     combined_length=0, length, offset;
-            int     index=0;
+        protected Message assembleMessage() throws Exception {
+            int combined_length=0, index=0;
 
             for(Message fragment: fragments)
                 combined_length+=fragment.getLength();
 
-            combined_buffer=new byte[combined_length];
-            retval=fragments[0].copy(false); // doesn't copy the payload, but copies the headers
-
+            byte[] combined_buffer=new byte[combined_length];
+            Message retval=fragments[0].copy(false); // doesn't copy the payload, but copies the headers
             for(int i=0; i < fragments.length; i++) {
                 Message fragment=fragments[i];
                 fragments[i]=null; // help garbage collection a bit
-                tmp=fragment.getRawBuffer();
-                length=fragment.getLength();
-                offset=fragment.getOffset();
+                ByteArrayPayload pl=fragment.getPayload();
+                byte[] tmp=pl.getBuf();
+                int length=pl.size(), offset=pl.arrayOffset();
                 System.arraycopy(tmp, offset, combined_buffer, index, length);
                 index+=length;
             }
-
-            retval.setBuffer(combined_buffer);
+            if(!needs_deserialization)
+                retval.setPayload(new ByteArrayPayload(combined_buffer));
+            else {
+                ByteArrayDataInputStream in=new ByteArrayDataInputStream(combined_buffer);
+                byte type=(byte)in.read();
+                Payload pl=payload_factory.create(type);
+                pl.readFrom(in);
+                retval.setPayload(pl);
+            }
             return retval;
         }
 
