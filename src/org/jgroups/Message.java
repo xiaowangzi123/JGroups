@@ -22,25 +22,15 @@ import java.util.function.Supplier;
  * @author Bela Ban
  */
 public class Message implements SizeStreamable, Constructable<Message> {
-    protected Address           dest_addr;
-    protected Address           src_addr;
-
-    /** The payload */
+    protected Address           dest_addr, src_addr;
     protected Payload           payload;
-
-    /** All headers are placed here */
     protected volatile Header[] headers;
-
     protected volatile short    flags;
-
     protected volatile byte     transient_flags; // transient_flags is neither marshalled nor copied
-
-
 
     static final byte           DEST_SET         =  1;
     static final byte           SRC_SET          =  1 << 1;
     static final byte           BUF_SET          =  1 << 2;
-
 
     // =============================== Flags ====================================
     public enum Flag {
@@ -57,7 +47,6 @@ public class Message implements SizeStreamable, Constructable<Message> {
 
         final short value;
         Flag(short value) {this.value=value;}
-
         public short value() {return value;}
     }
 
@@ -86,20 +75,22 @@ public class Message implements SizeStreamable, Constructable<Message> {
         headers=createHeaders(Util.DEFAULT_HEADERS);
     }
 
-   /**
-    * Constructs a message given a destination and source address and the payload byte buffer
-    * @param dest The Address of the receiver. If it is null, then the message is sent to the group. Otherwise, it is
-    *             sent to a single member.
-    * @param buf The payload. Note that this buffer must not be modified (e.g. buf[0]='x' is not
-    *           allowed) since we don't copy the contents.
-    */
+    /**
+     * Constructs a message given a destination and source address and the payload byte buffer
+     * @param dest The Address of the receiver. If it is null, then the message is sent to the group. Otherwise, it is
+     *             sent to a single member.
+     * @param buf The payload. Note that this buffer must not be modified (e.g. buf[0]='x' is not
+     *           allowed) since we don't copy the contents.
+     * @deprecated Use {@link Message#Message(Address,Payload)} instead
+     */
+    @Deprecated
     public Message(Address dest, byte[] buf) {
         this(dest, buf, 0, buf != null? buf.length : 0);
     }
 
 
-   /**
-    * Constructs a message. The index and length parameters provide a reference to a byte buffer, rather than a copy,
+    /**
+     * Constructs a message. The index and length parameters provide a reference to a byte buffer, rather than a copy,
     * and refer to a subset of the buffer. This is important when we want to avoid copying. When the message is
     * serialized, only the subset is serialized.</p>
     * <em>
@@ -117,13 +108,30 @@ public class Message implements SizeStreamable, Constructable<Message> {
     */
     public Message(Address dest, byte[] buf, int offset, int length) {
         this(dest);
-        setBuffer(buf, offset, length);
+        if(buf != null)
+            setPayload(new ByteArrayPayload(buf, offset, length));
     }
 
-
+    /**
+     *
+     * @param dest
+     * @param buf
+     * @deprecated Use {@link Message#Message(Address,Payload)} instead
+     */
     public Message(Address dest, Buffer buf) {
         this(dest);
-        setBuffer(buf);
+        if(buf != null)
+            setPayload(new ByteArrayPayload(buf.getBuf(), buf.getOffset(), buf.getLength()));
+    }
+
+    /**
+     * Sets the payload of the message
+     * @param dest The destination
+     * @param payload The payload
+     */
+    public Message(Address dest, Payload payload) {
+        this(dest);
+        this.payload=payload;
     }
 
 
@@ -166,9 +174,9 @@ public class Message implements SizeStreamable, Constructable<Message> {
     public Message setPayload(Payload pl)     {this.payload=pl; return this;}
 
     @Deprecated
-    public int     getOffset()                {return _offset();}
+    public int     getOffset()                {return payload == null? 0 : payload.arrayOffset();}
     @Deprecated
-    public int     offset()                   {return _offset();}
+    public int     offset()                   {return payload == null? 0 : payload.arrayOffset();}
 
 
     /** Returns the number of bytes of the payload, or an approximation if the payload does not have a byte[] array */
@@ -182,12 +190,8 @@ public class Message implements SizeStreamable, Constructable<Message> {
      * is simply a reference to the old buffer.<br/>
      * Even if offset and length are used: we return the <em>entire</em> buffer, not a subset.
      */
-    public byte[]  getRawBuffer()             {return _array();}
-    public byte[]  rawBuffer()                {return _array();}
-    public byte[]  buffer()                   {return getBuffer();}
-    public Buffer  buffer2()                  {return getBuffer2();}
-    public Message buffer(byte[] b)           {return setBuffer(b);}
-    public Message buffer(Buffer b)           {return setBuffer(b);}
+    public byte[]  getRawBuffer()             {return payload == null? null : payload.array();}
+    public byte[]  rawBuffer()                {return payload == null? null : payload.array();}
     public int     getNumHeaders()            {return Headers.size(this.headers);}
     public int     numHeaders()               {return Headers.size(this.headers);}
 
@@ -198,12 +202,9 @@ public class Message implements SizeStreamable, Constructable<Message> {
     * @deprecated Use {@link #getPayload()} instead
     */
     @Deprecated public byte[] getBuffer() {
-        return _array();
+        return payload == null? null : payload.array();
     }
 
-    public Buffer getBuffer2() {
-        return _array2();
-    }
 
     /**
      * Sets the buffer.<p/>
@@ -283,7 +284,7 @@ public class Message implements SizeStreamable, Constructable<Message> {
             return setPayload(new ByteArrayPayload(buf.getBuf(), buf.getOffset(), buf.getLength()));
         }
         try {
-            return setBuffer(Util.objectToByteBuffer(obj));
+            return setPayload(new ByteArrayPayload(Util.objectToByteBuffer(obj)));
         }
         catch(Exception ex) {
             throw new IllegalArgumentException(ex);
@@ -314,7 +315,8 @@ public class Message implements SizeStreamable, Constructable<Message> {
     @Deprecated
     public <T extends Object> T getObject(ClassLoader loader) {
         try {
-            return Util.objectFromByteBuffer(_array(), _offset(), payload.size(), loader);
+            return Util.objectFromByteBuffer(payload == null? null : payload.array(),
+                                             payload == null? 0 : payload.arrayOffset(), payload.size(), loader);
         }
         catch(Exception ex) {
             throw new IllegalArgumentException(ex);
@@ -858,28 +860,6 @@ public class Message implements SizeStreamable, Constructable<Message> {
 
     protected static Header[] createHeaders(int size) {
         return size > 0? new Header[size] : new Header[3];
-    }
-
-    /** Grabs the byte[] array of the payload *if* possible, e.g. ByteArrayBayload or NioPayload, else throws an exception
-     * @deprecated Use {@link #getPayload()} instead
-     */
-    @Deprecated protected byte[] _array() {
-        return payload == null? null : payload.array();
-    }
-
-    /** Returns of the payload (as a Buffer) *if* possible, e.g. ByteArrayBayload or NioPayload, else throws an exception
-     * @deprecated Use {@link #getPayload()} instead
-     */
-    @Deprecated protected Buffer _array2() {
-        return payload == null? null : new Buffer(payload.array(), payload.arrayOffset(), payload.size());
-    }
-
-    /** Grabs the byte[] array of the payload *if* possible and returns its offset, e.g. ByteArrayBayload or NioPayload,
-     * else throws an exception
-     * @deprecated Use {@link #getPayload()} instead, downcast to (e.g.) ByteArrayPayload and call getOffset() on it
-     */
-    @Deprecated protected int _offset() {
-        return payload == null? 0 : payload.arrayOffset();
     }
 
 }

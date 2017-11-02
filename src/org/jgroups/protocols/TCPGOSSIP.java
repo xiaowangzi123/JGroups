@@ -165,7 +165,7 @@ public class TCPGOSSIP extends Discovery implements RouterStub.MembersNotificati
                 continue;
             // the message needs to be DONT_BUNDLE, see explanation above
             final Message msg=new Message(physical_addr).setFlag(Message.Flag.INTERNAL, Message.Flag.DONT_BUNDLE, Message.Flag.OOB)
-              .putHeader(this.id, hdr).setBuffer(marshal(data));
+              .putHeader(this.id, hdr).setPayload(marshal(data));
             log.trace("%s: sending discovery request to %s", local_addr, msg.getDest());
             down_prot.down(msg);
         }

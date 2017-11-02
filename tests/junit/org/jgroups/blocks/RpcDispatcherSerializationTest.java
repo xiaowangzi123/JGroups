@@ -1,6 +1,7 @@
 package org.jgroups.blocks;
 
 import org.jgroups.Address;
+import org.jgroups.ByteArrayPayload;
 import org.jgroups.Global;
 import org.jgroups.JChannel;
 import org.jgroups.tests.ChannelTestBase;
@@ -123,7 +124,7 @@ public class RpcDispatcherSerializationTest extends ChannelTestBase {
             }
             else {
                 out.writeByte(OBJ);
-                Buffer buf=Util.objectToBuffer(obj);
+                ByteArrayPayload buf=Util.objectToPayload(obj);
                 out.write(buf.getBuf(), buf.getOffset(), buf.getLength());
             }
         }

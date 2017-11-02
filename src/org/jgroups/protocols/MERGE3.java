@@ -281,7 +281,7 @@ public class MERGE3 extends Protocol {
                 break;
             case VIEW_REQ:
                 Message view_rsp=new Message(sender).setFlag(Message.Flag.INTERNAL)
-                  .putHeader(getId(), MergeHeader.createViewResponse()).setBuffer(marshal(view));
+                  .putHeader(getId(), MergeHeader.createViewResponse()).setPayload(marshal(view));
                 down_prot.down(view_rsp);
                 break;
             case VIEW_RSP:
@@ -308,8 +308,8 @@ public class MERGE3 extends Protocol {
         return ret;
     }
 
-    public static Buffer marshal(View view) {
-        return Util.streamableToBuffer(view);
+    public static Payload marshal(View view) {
+        return Util.streamableToPayload(view);
     }
 
     protected View readView(byte[] buffer, int offset, int length) {

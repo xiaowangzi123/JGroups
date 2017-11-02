@@ -314,9 +314,9 @@ public class SEQUENCER extends Protocol {
             for(Map.Entry<Long,Message> entry: forward_table.entrySet()) {
                 Long key=entry.getKey();
                 Message msg=entry.getValue();
-                Buffer buf;
+                Payload buf;
                 try {
-                    buf=Util.streamableToBuffer(msg);
+                    buf=Util.streamableToPayload(msg);
                 }
                 catch(Exception e) {
                     log.error(Util.getMessage("FlushingBroadcastingFailed"), e);
@@ -347,10 +347,10 @@ public class SEQUENCER extends Protocol {
             Map.Entry<Long,Message> entry=forward_table.firstEntry();
             final Long key=entry.getKey();
             Message    msg=entry.getValue();
-            Buffer     buf;
+            Payload    buf;
 
             try {
-                buf=Util.streamableToBuffer(msg);
+                buf=Util.streamableToPayload(msg);
             }
             catch(Exception e) {
                 log.error(Util.getMessage("FlushingBroadcastingFailed"), e);
@@ -414,7 +414,7 @@ public class SEQUENCER extends Protocol {
         byte type=flush? SequencerHeader.FLUSH : SequencerHeader.FORWARD;
         try {
             SequencerHeader hdr=new SequencerHeader(type, seqno);
-            Message forward_msg=new Message(target, Util.streamableToBuffer(msg)).putHeader(this.id,hdr);
+            Message forward_msg=new Message(target, Util.streamableToPayload(msg)).putHeader(this.id,hdr);
             down_prot.down(forward_msg);
             forwarded_msgs++;
         }

@@ -8,7 +8,6 @@ import org.jgroups.protocols.pbcast.GMS;
 import org.jgroups.protocols.pbcast.JoinRsp;
 import org.jgroups.protocols.pbcast.NAKACK2;
 import org.jgroups.stack.ProtocolStack;
-import org.jgroups.util.Buffer;
 import org.jgroups.util.ByteArrayDataOutputStream;
 import org.jgroups.util.Util;
 import org.testng.annotations.AfterMethod;
@@ -170,7 +169,7 @@ public class ASYM_ENCRYPT_Test extends EncryptTest {
         JoinRsp join_rsp=new JoinRsp(rogue_view, null);
         GMS.GmsHeader gms_hdr=new GMS.GmsHeader(GMS.GmsHeader.JOIN_RSP);
         Message rogue_join_rsp=new Message(b.getAddress(), rogue.getAddress()).putHeader(GMS_ID, gms_hdr)
-          .setBuffer(GMS.marshal(join_rsp)).setFlag(Message.Flag.NO_RELIABILITY); // bypasses NAKACK2 / UNICAST3
+          .setPayload(GMS.marshal(join_rsp)).setFlag(Message.Flag.NO_RELIABILITY); // bypasses NAKACK2 / UNICAST3
         rogue.down(rogue_join_rsp);
         for(int i=0; i < 10; i++) {
             if(b.getView().size() > 3)
@@ -348,11 +347,11 @@ public class ASYM_ENCRYPT_Test extends EncryptTest {
     }
 
 
-    protected static Buffer marshalView(final View view) throws Exception {
+    protected static Payload marshalView(final View view) throws Exception {
         final ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(Global.SHORT_SIZE + view.serializedSize());
         out.writeShort(determineFlags(view));
         view.writeTo(out);
-        return out.getBuffer();
+        return out.getPayload();
     }
 
     protected static short determineFlags(final View view) {

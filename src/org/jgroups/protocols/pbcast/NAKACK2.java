@@ -1421,7 +1421,7 @@ public class NAKACK2 extends Protocol implements DiagnosticsHandler.ProbeHandler
                 dest=random_member;
         }
 
-        Message retransmit_msg=new Message(dest).setBuffer(Util.streamableToBuffer(missing_msgs))
+        Message retransmit_msg=new Message(dest).setPayload(Util.streamableToPayload(missing_msgs))
           .setFlag(Message.Flag.OOB, Message.Flag.INTERNAL)
           .putHeader(this.id, NakAckHeader2.createXmitRequestHeader(sender));
 

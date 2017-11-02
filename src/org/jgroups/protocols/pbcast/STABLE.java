@@ -662,7 +662,7 @@ public class STABLE extends Protocol {
         final Message msg=new Message(dest)
           .setFlag(Message.Flag.OOB,Message.Flag.INTERNAL,Message.Flag.NO_RELIABILITY)
           .putHeader(this.id, new StableHeader(StableHeader.STABLE_GOSSIP, current_view.getViewId()))
-          .setBuffer(marshal(d));
+          .setPayload(marshal(d));
         try {
             if(!send_in_background) {
                 down_prot.down(msg);
@@ -685,8 +685,8 @@ public class STABLE extends Protocol {
     }
 
 
-    public static Buffer marshal(Digest digest) {
-        return Util.streamableToBuffer(digest);
+    public static Payload marshal(Digest digest) {
+        return Util.streamableToPayload(digest);
     }
 
     protected Digest readDigest(byte[] buffer, int offset, int length) {
@@ -730,7 +730,7 @@ public class STABLE extends Protocol {
         try {
             Message msg=new Message().setFlag(Message.Flag.OOB, Message.Flag.INTERNAL, Message.Flag.NO_RELIABILITY)
               .putHeader(id, new StableHeader(StableHeader.STABILITY, view_id))
-              .setBuffer(marshal(stability_digest));
+              .setPayload(marshal(stability_digest));
             log.trace("%s: sending stability msg %s", local_addr, printDigest(stability_digest));
             num_stability_msgs_sent++;
             down_prot.down(msg);

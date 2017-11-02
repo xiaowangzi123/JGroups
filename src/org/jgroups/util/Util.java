@@ -555,15 +555,15 @@ public class Util {
     }
 
 
-    public static Buffer objectToBuffer(Object obj) throws Exception {
+    public static ByteArrayPayload objectToPayload(Object obj) throws Exception {
         if(obj == null)
-            return new Buffer(TYPE_NULL_ARRAY);
+            return new ByteArrayPayload(TYPE_NULL_ARRAY);
 
         if(obj instanceof Throwable) {
             ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(512, true);
             out.write(TYPE_EXCEPTION);
             Util.exceptionToStream((Throwable)obj, out);
-            return out.getBuffer();
+            return out.getPayload();
         }
 
         if(obj instanceof Streamable) {
@@ -571,7 +571,7 @@ public class Util {
             final ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(expected_size, true);
             out.write(TYPE_STREAMABLE);
             writeGenericStreamable((Streamable)obj,out);
-            return out.getBuffer();
+            return out.getPayload();
         }
 
         Byte type=PRIMITIVE_TYPES.get(obj.getClass());
@@ -581,12 +581,11 @@ public class Util {
             try(ObjectOutputStream out=new ObjectOutputStream(new OutputStreamAdapter(out_stream))) {
                 out.writeObject(obj);
                 out.flush();
-                return out_stream.getBuffer();
+                return out_stream.getPayload();
             }
         }
-        return new Buffer(marshalPrimitiveType(type, obj));
+        return new ByteArrayPayload(marshalPrimitiveType(type, obj));
     }
-
 
     protected static byte[] marshalPrimitiveType(byte type, Object obj) {
           switch(type) {
@@ -815,12 +814,11 @@ public class Util {
         writeException(causes, t, out);
     }
 
-    public static Buffer exceptionToBuffer(Throwable t) throws Exception {
+    public static ByteArrayPayload exceptionToPayload(Throwable t) throws Exception {
         ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(512, true);
         exceptionToStream(t, out);
-        return out.getBuffer();
+        return out.getPayload();
     }
-
 
     public static Throwable exceptionFromStream(DataInput in) throws Exception {
         return exceptionFromStream(in, 0);
@@ -970,18 +968,17 @@ public class Util {
         return Arrays.copyOf(out.buffer(), out.position());
     }
 
-    public static Buffer streamableToBuffer(Streamable obj) {
+    public static ByteArrayPayload streamableToPayload(Streamable obj) {
         int expected_size=obj instanceof SizeStreamable? ((SizeStreamable)obj).serializedSize() +1 : 512;
         final ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(expected_size);
         try {
             Util.writeStreamable(obj,out);
-            return out.getBuffer();
+            return out.getPayload();
         }
         catch(Exception ex) {
             return null;
         }
     }
-
 
     public static byte[] collectionToByteBuffer(Collection<Address> c) throws Exception {
         final ByteArrayDataOutputStream out=new ByteArrayDataOutputStream((int)Util.size(c));
@@ -1751,13 +1748,13 @@ public class Util {
     }
 
 
-    public static Buffer messageToByteBuffer(Message msg) throws Exception {
-        ByteArrayDataOutputStream out=new ByteArrayDataOutputStream((int)msg.serializedSize()+1);
+    public static ByteArrayPayload messageToByteBuffer(Message msg) throws Exception {
+        ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(msg.serializedSize() +1);
 
         out.writeBoolean(msg != null);
         if(msg != null)
             msg.writeTo(out);
-        return out.getBuffer();
+        return out.getPayload();
     }
 
     public static Message byteBufferToMessage(byte[] buffer,int offset,int length) throws Exception {
@@ -4188,7 +4185,6 @@ public class Util {
         final int IN_BRACKET=2;
         final char[] chars=string.toCharArray();
         StringBuilder buffer=new StringBuilder();
-        boolean properties=false;
         int state=NORMAL;
         int start=0;
         for(int i=0; i < chars.length; ++i) {
@@ -4196,15 +4192,13 @@ public class Util {
 
             // Dollar sign outside brackets
             if(c == '$' && state != IN_BRACKET) {
-
                 // check for escape char '\':
                 if(i > 0 && chars[i-1] != '\\')
                     state=SEEN_DOLLAR;
             }
 
-                // Open bracket immediatley after dollar
+            // Open bracket immediatley after dollar
             else if(c == '{' && state == SEEN_DOLLAR) {
-                // buffer.append(string.substring(start,i - 1));
                 append(buffer, string.substring(start,i - 1));
                 state=IN_BRACKET;
                 start=i - 1;
@@ -4223,7 +4217,6 @@ public class Util {
                 else // Collect the system property
                 {
                     String value=null;
-
                     String key=string.substring(start + 2,i);
 
                     // check for alias
@@ -4266,26 +4259,16 @@ public class Util {
                         }
                     }
 
-                    if(value != null) {
-                        properties=true;
+                    if(value != null)
                         buffer.append(value);
-                    }
                 }
                 start=i + 1;
                 state=NORMAL;
             }
         }
-
-        // No properties
-       // if(!properties)
-         //   return string;
-
         // Collect the trailing characters
-        if(start != chars.length) {
-            // buffer.append(string.substring(start,chars.length));
+        if(start != chars.length)
             append(buffer, string.substring(start, chars.length));
-        }
-
         return buffer.toString();
     }
 

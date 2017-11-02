@@ -415,8 +415,8 @@ public class SASL extends Protocol {
             return;
 
         JoinRsp joinRes = new JoinRsp(error_msg); // specify the error message on the JoinRsp
-        Message msg = new Message(dest).putHeader(GMS_ID, new GmsHeader(GmsHeader.JOIN_RSP)).setBuffer(
-                GMS.marshal(joinRes));
+        Message msg=new Message(dest).putHeader(GMS_ID, new GmsHeader(GmsHeader.JOIN_RSP))
+          .setPayload(GMS.marshal(joinRes));
         down_prot.down(msg);
     }
 

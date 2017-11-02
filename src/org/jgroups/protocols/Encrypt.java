@@ -328,7 +328,7 @@ public abstract class Encrypt extends Protocol {
             if(msg.getSrc() == null)
                 msg.setSrc(local_addr);
 
-            Buffer serialized_msg=Util.streamableToBuffer(msg);
+            ByteArrayPayload serialized_msg=Util.streamableToPayload(msg);
             byte[] encrypted_msg=code(serialized_msg.getBuf(),serialized_msg.getOffset(),serialized_msg.getLength(),false);
 
             if(sign_msgs) {

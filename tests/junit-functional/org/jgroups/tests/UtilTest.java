@@ -492,7 +492,7 @@ public class UtilTest {
     }
 
     private static void _testMessage(Message msg) throws Exception {
-        Buffer buf=Util.messageToByteBuffer(msg);
+        ByteArrayPayload buf=Util.messageToByteBuffer(msg);
         Message msg2=Util.byteBufferToMessage(buf.getBuf(), buf.getOffset(), buf.getLength());
         Assert.assertEquals(msg.getSrc(), msg2.getSrc());
         Assert.assertEquals(msg.getDest(), msg2.getDest());
@@ -641,7 +641,7 @@ public class UtilTest {
 
 
     static void objectToBuffer(Object obj) throws Exception {
-        Buffer buf=Util.objectToBuffer(obj);
+        ByteArrayPayload buf=Util.objectToPayload(obj);
         assert buf != null;
         assert buf.getLength() > 0;
         Object obj2=Util.objectFromByteBuffer(buf.getBuf(), buf.getOffset(), buf.getLength());
@@ -660,7 +660,7 @@ public class UtilTest {
         Assert.assertEquals(obj, obj2);
     }
 
-    public static void testWriteStreamable() throws Exception {
+    public void testWriteStreamable() throws Exception {
         Message m=new Message(null, "Hello");
         ViewId vid2=new ViewId(Util.createRandomAddress(), 35623);
         ByteArrayOutputStream outstream=new ByteArrayOutputStream();
@@ -673,7 +673,7 @@ public class UtilTest {
         DataInputStream dis=new DataInputStream(instream);
         Message m2=Util.readGenericStreamable(dis);
         ViewId v3=Util.readGenericStreamable(dis);
-        assert m2.getBuffer() != null;
+        assert m2.getPayload() != null;
         Assert.assertEquals(m.getLength(), m2.getLength());
         assert v3 != null;
     }

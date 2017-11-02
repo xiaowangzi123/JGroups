@@ -608,7 +608,7 @@ public class GMS extends Protocol implements DiagnosticsHandler.ProbeHandler {
         if(jr == null || joiners == null || joiners.isEmpty())
             return;
 
-        Buffer marshalled_jr=marshal(jr);
+        Payload marshalled_jr=marshal(jr);
         for(Address joiner: joiners) {
             log.trace("%s: sending join-rsp to %s: view=%s (%d mbrs)", local_addr, joiner, jr.getView(), jr.getView().size());
             sendJoinResponse(marshalled_jr, joiner);
@@ -617,11 +617,11 @@ public class GMS extends Protocol implements DiagnosticsHandler.ProbeHandler {
 
     public void sendJoinResponse(JoinRsp rsp, Address dest) {
         Message m=new Message(dest).putHeader(this.id, new GmsHeader(GmsHeader.JOIN_RSP))
-          .setBuffer(marshal(rsp)).setFlag(OOB, INTERNAL);
+          .setPayload(marshal(rsp)).setFlag(OOB, INTERNAL);
         getDownProtocol().down(m);
     }
 
-    protected void sendJoinResponse(Buffer marshalled_rsp, Address dest) {
+    protected void sendJoinResponse(Payload marshalled_rsp, Address dest) {
         Message m=new Message(dest, marshalled_rsp).putHeader(this.id, new GmsHeader(GmsHeader.JOIN_RSP))
           .setFlag(OOB, INTERNAL);
         getDownProtocol().down(m);
@@ -1184,8 +1184,8 @@ public class GMS extends Protocol implements DiagnosticsHandler.ProbeHandler {
         }
     }
 
-    public static Buffer marshal(JoinRsp join_rsp) {
-        return Util.streamableToBuffer(join_rsp);
+    public static Payload marshal(JoinRsp join_rsp) {
+        return Util.streamableToPayload(join_rsp);
     }
 
     protected static Buffer marshal(Collection<? extends Address> mbrs) {

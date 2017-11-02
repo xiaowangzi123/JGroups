@@ -343,7 +343,7 @@ public class STATE_TRANSFER extends Protocol implements ProcessingQueue.Handler<
 
     protected void sendException(Address requester, Throwable exception) {
         try {
-            Message ex_msg=new Message(requester).setBuffer(Util.exceptionToBuffer(exception))
+            Message ex_msg=new Message(requester).setPayload(Util.exceptionToPayload(exception))
               .putHeader(getId(), new StateHeader(StateHeader.STATE_EX));
             down(ex_msg);
         }
