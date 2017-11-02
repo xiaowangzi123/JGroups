@@ -2,10 +2,7 @@ package org.jgroups;
 
 import org.jgroups.util.Util;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.InputStream;
-import java.io.SequenceInputStream;
+import java.io.*;
 import java.util.*;
 import java.util.stream.Stream;
 import java.util.stream.StreamSupport;
@@ -52,9 +49,6 @@ public class CompositePayload implements Payload, Iterable<Payload> {
     public byte[]           array()                      {throw new UnsupportedOperationException(NO_ARRAY_MSG);}
     public InputStream      getInput()                   {return new SequenceInputStream(new PayloadEnumeration());}
 
-    // public Enumeration<InputStream> getEnumerator() {
-    //    return new PayloadEnumeration();
-    //}
 
     /** Adds the payload at the end of the array. Increases the array if needed */
     public CompositePayload add(Payload pl) {

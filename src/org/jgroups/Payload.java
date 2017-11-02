@@ -1,6 +1,5 @@
 package org.jgroups;
 
-import org.jgroups.util.Buffer;
 import org.jgroups.util.ByteArrayDataOutputStream;
 import org.jgroups.util.SizeStreamable;
 
@@ -66,12 +65,12 @@ public interface Payload extends SizeStreamable {
      */
     Payload copy();
 
-    default Buffer serialize() throws Exception {
+    default ByteArrayPayload serialize() throws Exception {
         int size=serializedSize()+Global.BYTE_SIZE;
         ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(Math.max(size, 256));
         out.write(getType());
         writeTo(out);
-        return new Buffer(out.buffer(), 0, out.position());
+        return out.getPayload();
     }
 
 
