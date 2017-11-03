@@ -2,12 +2,13 @@
 package org.jgroups.blocks;
 
 
-import org.jgroups.Address;
-import org.jgroups.JChannel;
-import org.jgroups.MembershipListener;
-import org.jgroups.Message;
-import org.jgroups.util.*;
+import org.jgroups.*;
+import org.jgroups.util.ByteArrayDataOutputStream;
+import org.jgroups.util.RspList;
+import org.jgroups.util.Util;
 
+import java.io.DataInput;
+import java.io.DataInputStream;
 import java.lang.reflect.Method;
 import java.util.Collection;
 import java.util.concurrent.CompletableFuture;
@@ -26,7 +27,6 @@ public class RpcDispatcher extends MessageDispatcher {
     /** Marshaller to marshall requests at the caller, unmarshal requests at the receiver(s), marshall responses at the
      * receivers and unmarshall responses at the caller */
     protected Marshaller    marshaller;
-
     protected MethodLookup  method_lookup;
 
 
@@ -90,7 +90,7 @@ public class RpcDispatcher extends MessageDispatcher {
             return empty_rsplist;
         }
 
-        Buffer buf=methodCallToBuffer(method_call, marshaller);
+        Payload buf=methodCallToBuffer(method_call, marshaller);
         RspList<T> retval=super.castMessage(dests, buf, opts);
         if(log.isTraceEnabled())
             log.trace("dests=%s, method_call=%s, options=%s, responses: %s", dests, method_call, opts, retval);
@@ -114,7 +114,7 @@ public class RpcDispatcher extends MessageDispatcher {
             log.trace("destination list of %s() is empty: no need to send message", method_call.methodName());
             return CompletableFuture.completedFuture(empty_rsplist);
         }
-        Buffer buf=methodCallToBuffer(method_call, marshaller);
+        Payload buf=methodCallToBuffer(method_call, marshaller);
         CompletableFuture<RspList<T>> retval=super.castMessageWithFuture(dests, buf, options);
         if(log.isTraceEnabled())
             log.trace("dests=%s, method_call=%s, options=%s", dests, method_call, options);
@@ -148,7 +148,7 @@ public class RpcDispatcher extends MessageDispatcher {
      * @throws Exception Thrown if the method invocation threw an exception, either at the caller or the callee
      */
     public <T> T callRemoteMethod(Address dest, MethodCall call, RequestOptions options) throws Exception {
-        Buffer buf=methodCallToBuffer(call, marshaller);
+        Payload buf=methodCallToBuffer(call, marshaller);
         T retval=super.sendMessage(dest, buf, options);
         if(log.isTraceEnabled())
             log.trace("dest=%s, method_call=%s, options=%s, retval: %s", dest, call, options, retval);
@@ -168,7 +168,7 @@ public class RpcDispatcher extends MessageDispatcher {
     public <T> CompletableFuture<T> callRemoteMethodWithFuture(Address dest, MethodCall call, RequestOptions opts) throws Exception {
         if(log.isTraceEnabled())
             log.trace("dest=%s, method_call=%s, options=%s", dest, call, opts);
-        Buffer buf=methodCallToBuffer(call, marshaller);
+        Payload buf=methodCallToBuffer(call, marshaller);
         return super.sendMessageWithFuture(dest, buf, opts);
     }
 
@@ -190,7 +190,7 @@ public class RpcDispatcher extends MessageDispatcher {
             return null;
         }
 
-        MethodCall method_call=methodCallFromBuffer(req.getRawBuffer(), req.getOffset(), req.getLength(), marshaller);
+        MethodCall method_call=methodCallFromBuffer(req.getPayload(), marshaller);
         if(log.isTraceEnabled())
             log.trace("[sender=%s], method_call: %s", req.getSrc(), method_call);
 
@@ -206,9 +206,8 @@ public class RpcDispatcher extends MessageDispatcher {
         return method_call.invoke(server_obj);
     }
 
-    protected static Buffer methodCallToBuffer(final MethodCall call, Marshaller marshaller) throws Exception {
+    protected static Payload methodCallToBuffer(final MethodCall call, Marshaller marshaller) throws Exception {
         Object[] args=call.args();
-
         int estimated_size=64;
         if(args != null)
             for(Object arg: args)
@@ -216,11 +215,11 @@ public class RpcDispatcher extends MessageDispatcher {
 
         ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(estimated_size, true);
         call.writeTo(out, marshaller);
-        return out.getBuffer();
+        return out.getPayload();
     }
 
-    protected static MethodCall methodCallFromBuffer(final byte[] buf, int offset, int length, Marshaller marshaller) throws Exception {
-        ByteArrayDataInputStream in=new ByteArrayDataInputStream(buf, offset, length);
+    protected static MethodCall methodCallFromBuffer(final Payload pl, Marshaller marshaller) throws Exception {
+        DataInput in=new DataInputStream(pl.getInput());
         MethodCall call=new MethodCall();
         call.readFrom(in, marshaller);
         return call;

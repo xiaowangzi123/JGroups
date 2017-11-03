@@ -1,9 +1,6 @@
 package org.jgroups.tests;
 
-import org.jgroups.Address;
-import org.jgroups.Global;
-import org.jgroups.JChannel;
-import org.jgroups.Message;
+import org.jgroups.*;
 import org.jgroups.blocks.MessageDispatcher;
 import org.jgroups.blocks.RequestOptions;
 import org.jgroups.logging.Log;
@@ -128,7 +125,7 @@ public class MessageDispatcherRSVPTest {
         try {
             Address target=unicast? channels[1].getAddress() : null;
             byte[] data="bla".getBytes();
-            Buffer buf=new Buffer(data, 0, data.length);
+            Payload buf=new ByteArrayPayload(data, 0, data.length);
             Message msg=new Message(target, "bla");
             msg.setFlag(Message.Flag.RSVP);
             closer.start();
@@ -158,7 +155,7 @@ public class MessageDispatcherRSVPTest {
     protected void sendMessageOnClosedChannel(Address dest, Message.Flag... flags) throws Exception {
         RequestOptions opts=RequestOptions.SYNC().timeout(2000).flags(flags);
         byte[] data="bla".getBytes();
-        Buffer buf=new Buffer(data, 0, data.length);
+        Payload buf=new ByteArrayPayload(data, 0, data.length);
         channels[0].close();
         try {
             if(dest == null) // multicast

@@ -8,13 +8,15 @@ import org.jgroups.protocols.TP;
 import org.jgroups.protocols.relay.SiteAddress;
 import org.jgroups.stack.Protocol;
 import org.jgroups.stack.StateTransferInfo;
-import org.jgroups.util.*;
+import org.jgroups.util.MessageBatch;
+import org.jgroups.util.RpcStats;
+import org.jgroups.util.RspList;
+import org.jgroups.util.StateTransferResult;
 
 import java.io.*;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeoutException;
-import java.util.stream.Stream;
 
 
 /**
@@ -234,7 +236,7 @@ public class MessageDispatcher implements RequestHandler, Closeable, ChannelList
      */
     public <T> RspList<T> castMessage(Collection<Address> dests, byte[] data, int offset, int length,
                                       RequestOptions opts) throws Exception {
-        return castMessage(dests, new Buffer(data, offset, length), opts);
+        return castMessage(dests, new ByteArrayPayload(data, offset, length), opts);
     }
 
 
@@ -247,7 +249,7 @@ public class MessageDispatcher implements RequestHandler, Closeable, ChannelList
      * @throws Exception If the request cannot be sent
      * @since 2.9
      */
-    public <T> RspList<T> castMessage(final Collection<Address> dests, Buffer data, RequestOptions opts) throws Exception {
+    public <T> RspList<T> castMessage(final Collection<Address> dests, Payload data, RequestOptions opts) throws Exception {
         GroupRequest<T> req=cast(dests, data, opts, true);
         return req != null? req.getNow(null) : null;
     }
@@ -262,7 +264,7 @@ public class MessageDispatcher implements RequestHandler, Closeable, ChannelList
      *                              was sent asynchronously
      * @throws Exception If the request cannot be sent
      */
-    public <T> CompletableFuture<RspList<T>> castMessageWithFuture(final Collection<Address> dests, Buffer data,
+    public <T> CompletableFuture<RspList<T>> castMessageWithFuture(final Collection<Address> dests, Payload data,
                                                                    RequestOptions opts) throws Exception {
         return cast(dests,data,opts,false);
     }
@@ -270,10 +272,10 @@ public class MessageDispatcher implements RequestHandler, Closeable, ChannelList
 
     protected <T> GroupRequest<T> cast(final Collection<Address> dests, byte[] data, int offset, int length,
                                        RequestOptions options, boolean block_for_results) throws Exception {
-        return cast(dests, new Buffer(data, offset, length), options, block_for_results);
+        return cast(dests, new ByteArrayPayload(data, offset, length), options, block_for_results);
     }
 
-    protected <T> GroupRequest<T> cast(final Collection<Address> dests, Buffer data, RequestOptions options,
+    protected <T> GroupRequest<T> cast(final Collection<Address> dests, Payload data, RequestOptions options,
                                        boolean block_for_results) throws Exception {
         if(options == null) {
             log.warn("request options were null, using default of sync");
@@ -297,7 +299,7 @@ public class MessageDispatcher implements RequestHandler, Closeable, ChannelList
         }
 
         if(options.hasExclusionList())
-            Stream.of(options.exclusionList()).forEach(real_dests::remove);
+            real_dests.removeAll(Arrays.asList(options.exclusionList()));
 
         if(real_dests.isEmpty()) {
             log.trace("destination list is empty, won't send message");
@@ -342,7 +344,7 @@ public class MessageDispatcher implements RequestHandler, Closeable, ChannelList
      * @throws TimeoutException If the call didn't succeed within the timeout defined in options (if set)
      */
     public <T> T sendMessage(Address dest, byte[] data, int offset, int length, RequestOptions opts) throws Exception {
-        return sendMessage(dest, new Buffer(data, offset, length), opts);
+        return sendMessage(dest, new ByteArrayPayload(data, offset, length), opts);
     }
 
     /**
@@ -355,7 +357,7 @@ public class MessageDispatcher implements RequestHandler, Closeable, ChannelList
      *                   it at the sender.
      * @throws TimeoutException If the call didn't succeed within the timeout defined in options (if set)
      */
-    public <T> T sendMessage(Address dest, Buffer data, RequestOptions opts) throws Exception {
+    public <T> T sendMessage(Address dest, Payload data, RequestOptions opts) throws Exception {
         if(dest == null)
             throw new IllegalArgumentException("message destination is null, cannot send message");
 
@@ -397,7 +399,7 @@ public class MessageDispatcher implements RequestHandler, Closeable, ChannelList
      */
      public <T> CompletableFuture<T> sendMessageWithFuture(Address dest, byte[] data, int offset, int length,
                                                            RequestOptions opts) throws Exception {
-         return sendMessageWithFuture(dest, new Buffer(data, offset, length), opts);
+         return sendMessageWithFuture(dest, new ByteArrayPayload(data, offset, length), opts);
      }
 
     /**
@@ -409,7 +411,7 @@ public class MessageDispatcher implements RequestHandler, Closeable, ChannelList
      * @throws Exception If there was problem sending the request, processing it at the receiver, or processing
      *                   it at the sender. {@link java.util.concurrent.Future#get()} will throw this exception
      */
-    public <T> CompletableFuture<T> sendMessageWithFuture(Address dest, Buffer data, RequestOptions opts) throws Exception {
+    public <T> CompletableFuture<T> sendMessageWithFuture(Address dest, Payload data, RequestOptions opts) throws Exception {
         if(dest == null)
             throw new IllegalArgumentException("message destination is null, cannot send message");
 

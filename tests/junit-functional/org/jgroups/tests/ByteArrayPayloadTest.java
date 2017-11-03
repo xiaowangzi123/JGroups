@@ -27,8 +27,9 @@ public class ByteArrayPayloadTest {
           ) {
             try {
                 ByteArrayPayload buf=new ByteArrayPayload(triple.getVal1(), triple.getVal2(), triple.getVal3());
+                System.out.println("buf = " + buf);
             }
-            catch(IllegalArgumentException | NullPointerException ex) {
+            catch(ArrayIndexOutOfBoundsException ex) {
                 System.out.printf("got %s as expected: %s\n", ex.getClass().getSimpleName(), ex.getMessage());
             }
         }
@@ -40,6 +41,15 @@ public class ByteArrayPayloadTest {
             System.out.printf("buf: %s\n", buf);
             assert buf != null;
         }
+    }
+
+    public void testEmptyPayload() {
+        byte[] buf={};
+        ByteArrayPayload pl=new ByteArrayPayload(buf, 0, buf.length);
+        assert pl.size() == 0;
+
+        pl=new ByteArrayPayload(buf);
+        assert pl.size() == 0;
     }
 
     public void testCopy() {
@@ -58,6 +68,11 @@ public class ByteArrayPayloadTest {
         pl2=pl.copy();
         assert pl2.getLength() == world.length;
         assert Arrays.equals(world, pl2.getBuf());
+
+        pl=new ByteArrayPayload(null, 0, 0);
+        pl2=pl.copy();
+        assert pl.getBuf() == null && pl2.getBuf() == null;
+        assert pl.getLength() == 0 && pl2.getLength() == 0;
     }
 
     public void testSerialization() throws Exception {
@@ -65,6 +80,8 @@ public class ByteArrayPayloadTest {
         int length="hello world".length();
         _testSerialization(new ByteArrayPayload(buf, 0, length), buf.length);
         _testSerialization(new ByteArrayPayload(buf, 0, 5), 5);
+        buf=new byte[0];
+        _testSerialization(new ByteArrayPayload(buf, 0, buf.length), buf.length);
     }
 
 
@@ -86,6 +103,7 @@ public class ByteArrayPayloadTest {
     }
 
     protected void assertEquals(byte[] first, byte[] second, int length) {
+        assert (first == null && second == null) || (first != null && second != null);
         for(int i=0; i < length; i++)
             assert first[i] == second[i];
     }

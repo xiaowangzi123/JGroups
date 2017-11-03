@@ -186,7 +186,7 @@ public class COUNTER extends Protocol {
             return up_prot.up(msg);
 
         try {
-            Object obj=streamableFromBuffer(msg.getRawBuffer(), msg.getOffset(), msg.getLength());
+            Object obj=streamableFromBuffer(msg.getPayload());
             if(log.isTraceEnabled())
                 log.trace("[" + local_addr + "] <-- [" + msg.getSrc() + "] " + obj);
 
@@ -433,7 +433,7 @@ public class COUNTER extends Protocol {
 
     protected void sendRequest(Address dest, Request req) {
         try {
-            Buffer buffer=requestToBuffer(req);
+            Payload buffer=requestToBuffer(req);
             Message msg=new Message(dest, buffer).putHeader(id, new CounterHeader());
             if(bypass_bundling)
                 msg.setFlag(Message.Flag.DONT_BUNDLE);
@@ -450,7 +450,7 @@ public class COUNTER extends Protocol {
 
     protected void sendResponse(Address dest, Response rsp) {
         try {
-            Buffer buffer=responseToBuffer(rsp);
+            Payload buffer=responseToBuffer(rsp);
             Message rsp_msg=new Message(dest, buffer).putHeader(id, new CounterHeader());
             if(bypass_bundling)
                 rsp_msg.setFlag(Message.Flag.DONT_BUNDLE);
@@ -468,7 +468,7 @@ public class COUNTER extends Protocol {
     protected void updateBackups(String name, long value, long version) {
         Request req=new UpdateRequest(name, value, version);
         try {
-            Buffer buffer=requestToBuffer(req);
+            Payload buffer=requestToBuffer(req);
             if(backup_coords != null && !backup_coords.isEmpty()) {
                 for(Address backup_coord: backup_coords)
                     send(backup_coord, buffer);
@@ -479,7 +479,7 @@ public class COUNTER extends Protocol {
         }
     }
 
-    protected void send(Address dest, Buffer buffer) {
+    protected void send(Address dest, Payload buffer) {
         try {
             Message rsp_msg=new Message(dest, buffer).putHeader(id, new CounterHeader());
             if(bypass_bundling)
@@ -497,36 +497,37 @@ public class COUNTER extends Protocol {
     }
 
 
-    protected static Buffer requestToBuffer(Request req) throws Exception {
+    protected static Payload requestToBuffer(Request req) throws Exception {
         return streamableToBuffer(REQUEST,(byte)requestToRequestType(req).ordinal(), req);
     }
 
-    protected static Buffer responseToBuffer(Response rsp) throws Exception {
+    protected static Payload responseToBuffer(Response rsp) throws Exception {
         return streamableToBuffer(RESPONSE,(byte)responseToResponseType(rsp).ordinal(), rsp);
     }
 
-    protected static Buffer streamableToBuffer(byte req_or_rsp, byte type, Streamable obj) throws Exception {
+    protected static Payload streamableToBuffer(byte req_or_rsp, byte type, Streamable obj) throws Exception {
         int expected_size=obj instanceof SizeStreamable? ((SizeStreamable)obj).serializedSize() : 100;
         ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(expected_size);
         out.writeByte(req_or_rsp);
         out.writeByte(type);
         obj.writeTo(out);
-        return new Buffer(out.buffer(), 0, out.position());
+        return out.getPayload();
     }
 
-    protected static Streamable streamableFromBuffer(byte[] buf, int offset, int length) throws Exception {
-        switch(buf[offset]) {
+    protected static Streamable streamableFromBuffer(Payload pl) throws Exception {
+        InputStream in=pl.getInput();
+        int type;
+        switch((type=in.read())) {
             case REQUEST:
-                return requestFromBuffer(buf, offset+1, length-1);
+                return requestFromBuffer(in);
             case RESPONSE:
-                return responseFromBuffer(buf, offset+1, length-1);
+                return responseFromBuffer(in);
             default:
-                throw new IllegalArgumentException("type " + buf[offset] + " is invalid (expected Request (1) or RESPONSE (2)");
+                throw new IllegalArgumentException("type " + type + " is invalid (expected Request (1) or RESPONSE (2)");
         }
     }
 
-    protected static final Request requestFromBuffer(byte[] buf, int offset, int length) throws Exception {
-        ByteArrayInputStream input=new ByteArrayInputStream(buf, offset, length);
+    protected static final Request requestFromBuffer(InputStream input) throws Exception {
         DataInputStream in=new DataInputStream(input);
         RequestType type=RequestType.values()[in.readByte()];
         Request retval=createRequest(type);
@@ -548,8 +549,7 @@ public class COUNTER extends Protocol {
         }
     }
 
-    protected static final Response responseFromBuffer(byte[] buf, int offset, int length) throws Exception {
-        ByteArrayInputStream input=new ByteArrayInputStream(buf, offset, length);
+    protected static final Response responseFromBuffer(InputStream input) throws Exception {
         DataInputStream in=new DataInputStream(input);
         ResponseType type=ResponseType.values()[in.readByte()];
         Response retval=createResponse(type);

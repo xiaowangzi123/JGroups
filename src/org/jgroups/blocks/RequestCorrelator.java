@@ -11,9 +11,7 @@ import org.jgroups.stack.DiagnosticsHandler;
 import org.jgroups.stack.Protocol;
 import org.jgroups.util.*;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.NotSerializableException;
+import java.io.*;
 import java.lang.reflect.InvocationTargetException;
 import java.util.*;
 import java.util.concurrent.ConcurrentMap;
@@ -118,7 +116,7 @@ public class RequestCorrelator {
      * @param req A request (usually the object that invokes this method). Its methods {@code receiveResponse()} and
      *            {@code suspect()} will be invoked when a message has been received or a member is suspected.
      */
-    public void sendRequest(Collection<Address> dest_mbrs, Buffer data, Request req, RequestOptions opts) throws Exception {
+    public void sendRequest(Collection<Address> dest_mbrs, Payload data, Request req, RequestOptions opts) throws Exception {
         if(transport == null) {
             log.warn("transport is not available !");
             return;
@@ -171,7 +169,7 @@ public class RequestCorrelator {
     }
 
     /** Sends a request to a single destination */
-    public void sendUnicastRequest(Address dest, Buffer data, Request req, RequestOptions opts) throws Exception {
+    public void sendUnicastRequest(Address dest, Payload data, Request req, RequestOptions opts) throws Exception {
         if(transport == null) {
             if(log.isWarnEnabled()) log.warn("transport is not available !");
             return;
@@ -360,7 +358,7 @@ public class RequestCorrelator {
             case Header.EXC_RSP:
                 Request req=requests.get(hdr.req_id);
                 if(req != null)
-                    handleResponse(req, msg.src(), msg.getRawBuffer(), msg.getOffset(), msg.getLength(), hdr.type == Header.EXC_RSP);
+                    handleResponse(req, msg.src(), msg.getPayload(), hdr.type == Header.EXC_RSP);
                 break;
 
             default:
@@ -402,10 +400,10 @@ public class RequestCorrelator {
             sendReply(req, hdr.req_id, retval, threw_exception);
     }
 
-    protected void handleResponse(Request req, Address sender, byte[] buf, int offset, int length, boolean is_exception) {
+    protected void handleResponse(Request req, Address sender, Payload pl, boolean is_exception) {
         Object retval;
         try {
-            retval=replyFromBuffer(buf, offset, length, marshaller);
+            retval=replyFromBuffer(pl, marshaller);
         }
         catch(Exception e) {
             log.error(Util.getMessage("FailedUnmarshallingBufferIntoReturnValue"), e);
@@ -417,7 +415,7 @@ public class RequestCorrelator {
 
 
     protected void sendReply(final Message req, final long req_id, Object reply, boolean is_exception) {
-        Buffer rsp_buf;
+        Payload rsp_buf;
         try {  // retval could be an exception, or a real value
             rsp_buf=replyToBuffer(reply, marshaller);
         }
@@ -435,7 +433,7 @@ public class RequestCorrelator {
                 return;
             }
         }
-        Message rsp=req.makeReply().setFlag(req.getFlags()).setBuffer(rsp_buf)
+        Message rsp=req.makeReply().setFlag(req.getFlags()).setPayload(rsp_buf)
           .clearFlag(Message.Flag.RSVP, Message.Flag.INTERNAL); // JGRP-1940
         sendResponse(rsp, req_id, is_exception);
     }
@@ -448,18 +446,18 @@ public class RequestCorrelator {
         transport.down(rsp);
     }
 
-    protected static Buffer replyToBuffer(Object obj, Marshaller marshaller) throws Exception {
+    protected static Payload replyToBuffer(Object obj, Marshaller marshaller) throws Exception {
         int estimated_size=marshaller != null? marshaller.estimatedSize(obj) : 50;
         ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(estimated_size, true);
         if(marshaller != null)
             marshaller.objectToStream(obj, out);
         else
             Util.objectToStream(obj, out);
-        return out.getBuffer();
+        return out.getPayload();
     }
 
-    protected static Object replyFromBuffer(final byte[] buf, int offset, int length, Marshaller marshaller) throws Exception {
-        ByteArrayDataInputStream in=new ByteArrayDataInputStream(buf, offset, length);
+    protected static Object replyFromBuffer(final Payload pl, Marshaller marshaller) throws Exception {
+        DataInput in=new DataInputStream(pl.getInput());
         return marshaller != null? marshaller.objectFromStream(in) : Util.objectFromStream(in);
     }
 

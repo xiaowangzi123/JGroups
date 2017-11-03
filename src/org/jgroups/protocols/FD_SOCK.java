@@ -303,7 +303,7 @@ public class FD_SOCK extends Protocol implements Runnable {
             // Return the cache to the sender of this message
             case FdHeader.GET_CACHE:
                 msg=new Message(msg.getSrc()).setFlag(Message.Flag.INTERNAL)
-                  .putHeader(this.id, new FdHeader(FdHeader.GET_CACHE_RSP)).setBuffer(marshal(cache));
+                  .putHeader(this.id, new FdHeader(FdHeader.GET_CACHE_RSP)).setPayload(marshal(cache));
                 down_prot.down(msg);
                 break;
 
@@ -762,7 +762,7 @@ public class FD_SOCK extends Protocol implements Runnable {
         return Objects.equals(local_addr, next) ? null : next;
     }
 
-    public static Buffer marshal(LazyRemovalCache<Address,IpAddress> addrs) {
+    public static Payload marshal(LazyRemovalCache<Address,IpAddress> addrs) {
         final ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(512);
         try {
             int size=addrs != null? addrs.size() : 0;
@@ -775,7 +775,7 @@ public class FD_SOCK extends Protocol implements Runnable {
                     Util.writeStreamable(val, out);
                 }
             }
-            return out.getBuffer();
+            return out.getPayload();
         }
         catch(Exception ex) {
             return null;

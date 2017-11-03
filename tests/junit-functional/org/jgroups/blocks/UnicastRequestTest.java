@@ -3,7 +3,6 @@ package org.jgroups.blocks;
 
 import org.jgroups.*;
 import org.jgroups.stack.Protocol;
-import org.jgroups.util.Buffer;
 import org.jgroups.util.Util;
 import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
@@ -21,7 +20,7 @@ import java.util.concurrent.TimeoutException;
 public class UnicastRequestTest {
     protected Address a, b, c;
     protected static final byte[] data="bla".getBytes();
-    protected static final Buffer buf=new Buffer(data, 0, data.length);
+    protected static final Payload buf=new ByteArrayPayload(data, 0, data.length);
 
     @BeforeClass
     void init() throws UnknownHostException {
@@ -198,21 +197,15 @@ public class UnicastRequestTest {
 
 
         @Override
-        public void sendUnicastRequest(Address dest, Buffer data, Request req, RequestOptions opts) throws Exception {
+        public void sendUnicastRequest(Address dest, Payload data, Request req, RequestOptions opts) throws Exception {
             send();
         }
 
         protected void send() {
-            if(async) {
-                new Thread() {
-                    public void run() {
-                        sendResponses();
-                    }
-                }.start();
-            }
-            else {
+            if(async)
+                new Thread(this::sendResponses).start();
+            else
                 sendResponses();
-            }
         }
 
         protected void sendResponses() {

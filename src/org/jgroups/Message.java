@@ -91,7 +91,7 @@ public class Message implements SizeStreamable, Constructable<Message> {
 
     /**
      * Constructs a message. The index and length parameters provide a reference to a byte buffer, rather than a copy,
-    * and refer to a subset of the buffer. This is important when we want to avoid copying. When the message is
+     * and refer to a subset of the buffer. This is important when we want to avoid copying. When the message is
     * serialized, only the subset is serialized.</p>
     * <em>
     * Note that the byte[] buffer passed as argument must not be modified. Reason: if we retransmit the
@@ -105,24 +105,15 @@ public class Message implements SizeStreamable, Constructable<Message> {
     * @param offset The index into the byte buffer
     * @param length The number of bytes to be used from <tt>buf</tt>. Both index and length are checked
     *           for array index violations and an ArrayIndexOutOfBoundsException will be thrown if invalid
+    * @deprecated Use {@link Message#Message(Address,Payload)} instead
     */
+    @Deprecated
     public Message(Address dest, byte[] buf, int offset, int length) {
         this(dest);
         if(buf != null)
             setPayload(new ByteArrayPayload(buf, offset, length));
     }
 
-    /**
-     *
-     * @param dest
-     * @param buf
-     * @deprecated Use {@link Message#Message(Address,Payload)} instead
-     */
-    public Message(Address dest, Buffer buf) {
-        this(dest);
-        if(buf != null)
-            setPayload(new ByteArrayPayload(buf.getBuf(), buf.getOffset(), buf.getLength()));
-    }
 
     /**
      * Sets the payload of the message
@@ -175,13 +166,9 @@ public class Message implements SizeStreamable, Constructable<Message> {
 
     @Deprecated
     public int     getOffset()                {return payload == null? 0 : payload.arrayOffset();}
-    @Deprecated
-    public int     offset()                   {return payload == null? 0 : payload.arrayOffset();}
-
 
     /** Returns the number of bytes of the payload, or an approximation if the payload does not have a byte[] array */
     public int     getLength()                {return payload != null? payload.size() : 0;}
-    public int     length()                   {return getLength();}
 
 
     /**
@@ -189,11 +176,11 @@ public class Message implements SizeStreamable, Constructable<Message> {
      * modified as we do not copy the buffer on copy() or clone(): the buffer of the copied message
      * is simply a reference to the old buffer.<br/>
      * Even if offset and length are used: we return the <em>entire</em> buffer, not a subset.
+     * @deprecated Use {@link Message#Message(Address,Payload)} instead
      */
+    @Deprecated
     public byte[]  getRawBuffer()             {return payload == null? null : payload.array();}
-    public byte[]  rawBuffer()                {return payload == null? null : payload.array();}
     public int     getNumHeaders()            {return Headers.size(this.headers);}
-    public int     numHeaders()               {return Headers.size(this.headers);}
 
 
    /**
@@ -202,7 +189,15 @@ public class Message implements SizeStreamable, Constructable<Message> {
     * @deprecated Use {@link #getPayload()} instead
     */
     @Deprecated public byte[] getBuffer() {
-        return payload == null? null : payload.array();
+        if(payload instanceof ByteArrayPayload) {
+            ByteArrayPayload pl=(ByteArrayPayload)payload;
+            if(pl.getOffset() == 0 && pl.getLength() == pl.array().length)
+                return pl.array();
+            byte[] retval=new byte[pl.getLength()];
+            System.arraycopy(pl.array(), pl.getOffset(), retval, 0, pl.getLength());
+            return retval;
+        }
+        return null;
     }
 
 
@@ -240,19 +235,6 @@ public class Message implements SizeStreamable, Constructable<Message> {
         return this;
     }
 
-    /**
-     * Sets the buffer<p/>
-     * Note that the byte[] buffer passed as argument must not be modified. Reason: if we retransmit the
-     * message, it would still have a ref to the original byte[] buffer passed in as argument, and so we would
-     * retransmit a changed byte[] buffer!
-     * @deprecated Use {@link #setPayload(Payload)} instead
-     */
-    @Deprecated
-    public Message setBuffer(Buffer buf) {
-        if(buf != null)
-            setPayload(new ByteArrayPayload(buf.getBuf(), buf.getOffset(), buf.getLength()));
-        return this;
-    }
 
 
    /**
@@ -316,7 +298,8 @@ public class Message implements SizeStreamable, Constructable<Message> {
     public <T extends Object> T getObject(ClassLoader loader) {
         try {
             return Util.objectFromByteBuffer(payload == null? null : payload.array(),
-                                             payload == null? 0 : payload.arrayOffset(), payload.size(), loader);
+                                             payload == null? 0 : payload.arrayOffset(),
+                                             payload == null? 0 : payload.size(), loader);
         }
         catch(Exception ex) {
             throw new IllegalArgumentException(ex);

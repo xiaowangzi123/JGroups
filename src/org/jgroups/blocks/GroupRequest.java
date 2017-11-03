@@ -2,10 +2,10 @@ package org.jgroups.blocks;
 
 
 import org.jgroups.Address;
+import org.jgroups.Payload;
 import org.jgroups.View;
 import org.jgroups.annotations.GuardedBy;
 import org.jgroups.protocols.relay.SiteAddress;
-import org.jgroups.util.Buffer;
 import org.jgroups.util.Rsp;
 import org.jgroups.util.RspList;
 
@@ -72,7 +72,7 @@ public class GroupRequest<T> extends Request<RspList<T>> {
     }
 
 
-    public void sendRequest(Buffer data) throws Exception {
+    public void sendRequest(Payload data) throws Exception {
         sendRequest(data, rsps.keySet());
     }
 
@@ -282,7 +282,7 @@ public class GroupRequest<T> extends Request<RspList<T>> {
         }
     }
 
-    protected void sendRequest(Buffer data, final Collection<Address> targetMembers) throws Exception {
+    protected void sendRequest(Payload data, final Collection<Address> targetMembers) throws Exception {
         try {
             corr.sendRequest(targetMembers, data, options.mode() == ResponseMode.GET_NONE? null : this, options);
         }

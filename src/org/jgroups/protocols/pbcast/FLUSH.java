@@ -571,7 +571,7 @@ public class FLUSH extends Protocol {
             Collection<? extends Address> flushParticipants=tuple.getVal1();
             Message response = new Message(flushRequester)
               .putHeader(this.id,new FlushHeader(FlushHeader.FLUSH_NOT_COMPLETED,fh.viewID))
-              .setBuffer(marshal(flushParticipants,null));
+              .setPayload(marshal(flushParticipants,null));
             down_prot.down(response);
             if (log.isDebugEnabled())
                 log.debug(localAddress + ": received START_FLUSH, responded with FLUSH_NOT_COMPLETED to " + flushRequester);
@@ -586,7 +586,7 @@ public class FLUSH extends Protocol {
                 continue;
             Message reject = new Message(flushMember).src(localAddress).setFlag(Message.Flag.OOB, Message.Flag.INTERNAL)
               .putHeader(this.id, new FlushHeader(FlushHeader.ABORT_FLUSH, viewId))
-              .setBuffer(marshal(participants, null));
+              .setPayload(marshal(participants, null));
             down_prot.down(reject);
         }
     }
@@ -697,7 +697,7 @@ public class FLUSH extends Protocol {
          flushMembers.addAll(participantsInFlush);
          flushMembers.removeAll(suspected);
          
-          msg = new Message(null).src(localAddress).setBuffer(marshal(participantsInFlush, null))
+          msg = new Message(null).src(localAddress).setPayload(marshal(participantsInFlush, null))
             .putHeader(this.id, new FlushHeader(FlushHeader.START_FLUSH, currentViewId()));
 
       }
@@ -783,7 +783,7 @@ public class FLUSH extends Protocol {
             Digest digest = (Digest) down_prot.down(Event.GET_DIGEST_EVT);
             Message start_msg = new Message(flushStarter)
               .putHeader(this.id, new FlushHeader(FlushHeader.FLUSH_COMPLETED, fh.viewID))
-              .setBuffer(marshal(tuple.getVal1(),digest));
+              .setPayload(marshal(tuple.getVal1(),digest));
             down_prot.down(start_msg);
             log.debug(localAddress + ": received START_FLUSH, responded with FLUSH_COMPLETED to " + flushStarter);
         }
@@ -815,7 +815,7 @@ public class FLUSH extends Protocol {
                 msg = new Message().setFlag(Message.Flag.OOB);
                 reconcileOks.clear();
                 msg.putHeader(this.id, new FlushHeader(FlushHeader.FLUSH_RECONCILE, currentViewId()))
-                  .setBuffer(marshal(flushMembers, d));
+                  .setPayload(marshal(flushMembers, d));
 
                 if (log.isDebugEnabled())
                     log.debug(localAddress
@@ -921,7 +921,8 @@ public class FLUSH extends Protocol {
         }
         if (flushOkCompleted) {
             Digest digest = (Digest) down_prot.down(Event.GET_DIGEST_EVT);
-            m.putHeader(this.id, new FlushHeader(FlushHeader.FLUSH_COMPLETED, viewID)).setBuffer(marshal(null, digest));
+            m.putHeader(this.id, new FlushHeader(FlushHeader.FLUSH_COMPLETED, viewID))
+              .setPayload(marshal(null, digest));
             down_prot.down(m);
 
             if (log.isDebugEnabled())
@@ -929,12 +930,12 @@ public class FLUSH extends Protocol {
         }
     }
 
-    protected static Buffer marshal(final Collection<? extends Address> participants, final Digest digest) {
+    protected static ByteArrayPayload marshal(final Collection<? extends Address> participants, final Digest digest) {
         final ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(512);
         try {
             Util.writeAddresses(participants, out);
             Util.writeStreamable(digest,out);
-            return out.getBuffer();
+            return out.getPayload();
         }
         catch(Exception ex) {
             return null;

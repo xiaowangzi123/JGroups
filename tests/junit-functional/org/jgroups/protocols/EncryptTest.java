@@ -6,7 +6,6 @@ import org.jgroups.demos.KeyStoreGenerator;
 import org.jgroups.protocols.pbcast.GMS;
 import org.jgroups.protocols.pbcast.NAKACK2;
 import org.jgroups.protocols.pbcast.NakAckHeader2;
-import org.jgroups.util.Buffer;
 import org.jgroups.util.ByteArrayDataOutputStream;
 import org.jgroups.util.MyReceiver;
 import org.jgroups.util.Util;
@@ -83,14 +82,14 @@ public abstract class EncryptTest {
         Stream.of(ra, rb, rc).map(MyReceiver::list).map(l -> l.stream().map(msg -> (String)msg.getObject())
           .collect(ArrayList::new, ArrayList::add, (x, y) -> {})).forEach(System.out::println);
         assertForEachReceiver(r -> r.size() == 3);
-        assertForEachMessage(msg -> msg.getRawBuffer() == null);
+        assertForEachMessage(msg -> msg.getPayload() == null);
     }
 
     /** Same as above, but all message payloads are empty (0-length String) */
     public void testRegularMessageReceptionWithEmptyMessages() throws Exception {
-        a.send(new Message(null).setBuffer(new byte[0]));
-        b.send(new Message(null).setBuffer(new byte[0]));
-        c.send(new Message(null).setBuffer(new byte[0]));
+        a.send(new Message(null).setPayload(new ByteArrayPayload(new byte[0])));
+        b.send(new Message(null).setPayload(new ByteArrayPayload(new byte[0])));
+        c.send(new Message(null).setPayload(new ByteArrayPayload(new byte[0])));
         for(int i=0; i < 10; i++) {
             if(ra.size() == 3 && rb.size() == 3 && rc.size() == 3)
                 break;
@@ -98,7 +97,10 @@ public abstract class EncryptTest {
         }
         assertForEachReceiver(r -> r.size() == 3);
         assertForEachMessage(msg -> msg.getLength() == 0);
-        assertForEachMessage(msg -> Arrays.equals(msg.getRawBuffer(), new byte[0]));
+        assertForEachMessage(msg -> {
+            ByteArrayPayload pl=msg.getPayload();
+            return Arrays.equals(pl.getBuf(), new byte[0]);
+        });
     }
 
     //@Test(groups=Global.FUNCTIONAL,singleThreaded=true)
@@ -295,7 +297,7 @@ public abstract class EncryptTest {
                                     rogue_addr, a.getAddress(), b.getAddress(), c.getAddress());
 
         Message view_change_msg=new Message().putHeader(GMS_ID, new GMS.GmsHeader(GMS.GmsHeader.VIEW))
-          .setBuffer(marshal(rogue_view));
+          .setPayload(marshal(rogue_view));
         rogue.send(view_change_msg);
 
         for(int i=0; i < 10; i++) {
@@ -316,12 +318,12 @@ public abstract class EncryptTest {
     }
 
 
-    protected static Buffer marshal(final View view) throws Exception {
+    protected static ByteArrayPayload marshal(final View view) throws Exception {
         ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(Util.size(view));
         out.writeShort(1);
         if(view != null)
             view.writeTo(out);
-        return out.getBuffer();
+        return out.getPayload();
     }
 
     protected void assertForEachReceiver(Predicate<MyReceiver<Message>> predicate) {
@@ -332,7 +334,7 @@ public abstract class EncryptTest {
         Stream.of(ra, rb, rc)
           .map(MyReceiver::list)
           .flatMap(Collection::stream)
-          .forEach(msg -> {assert predicate.test(msg);});
+          .forEach(msg -> {assert predicate.test(msg) : "message: " + msg;});
     }
 
     protected static String print(List<Message> msgs) {

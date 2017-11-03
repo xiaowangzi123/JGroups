@@ -38,6 +38,8 @@ public class ByteArrayPayload implements Payload {
      *  otherwise a copy of the subrange is made
      */
     public ByteArrayPayload copy() {
+        if(buf == null)
+            return new ByteArrayPayload();
         if(offset == 0 && length == buf.length)
             return new ByteArrayPayload(buf, offset, length);
         byte[] tmp=new byte[length];
@@ -56,19 +58,22 @@ public class ByteArrayPayload implements Payload {
     /** Writes the buffer to the output stream. No need to check for a null buf, as Message will already take care of
      * that and not invoke this method if the payload is null */
     public void writeTo(DataOutput out) throws Exception {
+        if(buf == null) {
+            out.writeInt(-1);
+            return;
+        }
         out.writeInt(length);
-        if(length > 0)
-            out.write(buf, offset, length);
+        out.write(buf, offset, length);
     }
 
     /** Populates the buffer from the input stream. The stream will contain length and buf (Message took care of that) */
     public void readFrom(DataInput in) throws Exception {
         int len=in.readInt();
-        if(len > 0) {
-            buf=new byte[len];
-            in.readFully(buf, 0, len);
-            length=len;
-        }
+        if(len < 0)
+            return;
+        buf=new byte[len];
+        in.readFully(buf, 0, len);
+        length=len;
     }
 
     public String toString() {
@@ -76,8 +81,9 @@ public class ByteArrayPayload implements Payload {
     }
 
     protected void set(byte[] b, int off, int len) {
-        if(off < 0 || off >= b.length || off+len > b.length)
-            throw new IllegalArgumentException(String.format("illegal offset (%d) or length (%d)", off, len));
+        if(b == null) return;
+        if(off < 0 || off > b.length || off+len > b.length)
+            throw new ArrayIndexOutOfBoundsException(String.format("illegal offset (%d) or length (%d)", off, len));
         this.buf=b;
         this.offset=off;
         this.length=len;

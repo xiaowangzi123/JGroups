@@ -1,14 +1,11 @@
 package org.jgroups.tests;
 
-import org.jgroups.Global;
-import org.jgroups.JChannel;
-import org.jgroups.Message;
+import org.jgroups.*;
 import org.jgroups.blocks.MessageDispatcher;
 import org.jgroups.blocks.RequestHandler;
 import org.jgroups.blocks.RequestOptions;
 import org.jgroups.blocks.ResponseMode;
 import org.jgroups.protocols.pbcast.GMS;
-import org.jgroups.util.Buffer;
 import org.jgroups.util.Rsp;
 import org.jgroups.util.RspList;
 import org.jgroups.util.Util;
@@ -25,13 +22,13 @@ import org.testng.annotations.Test;
  */
 @Test(groups=Global.STACK_DEPENDENT, singleThreaded=true)
 public class MessageDispatcherUnitTest extends ChannelTestBase {
-    protected MessageDispatcher   d1, d2;
-    protected JChannel            a, b;
-    protected static final Buffer buf;
+    protected MessageDispatcher    d1, d2;
+    protected JChannel             a, b;
+    protected static final Payload buf;
 
     static {
         byte[] data="bla".getBytes();
-        buf=new Buffer(data, 0, data.length);
+        buf=new ByteArrayPayload(data, 0, data.length);
     }
 
     @BeforeClass

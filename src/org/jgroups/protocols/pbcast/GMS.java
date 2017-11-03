@@ -578,7 +578,7 @@ public class GMS extends Protocol implements DiagnosticsHandler.ProbeHandler {
         }
 
         Message view_change_msg=new Message().putHeader(this.id, new GmsHeader(GmsHeader.VIEW))
-          .setBuffer(marshal(new_view, digest)).setTransientFlag(Message.TransientFlag.DONT_LOOPBACK);
+          .setPayload(marshal(new_view, digest)).setTransientFlag(Message.TransientFlag.DONT_LOOPBACK);
         if(new_view instanceof MergeView) // https://issues.jboss.org/browse/JGRP-1484
             view_change_msg.setFlag(Message.Flag.NO_TOTAL_ORDER);
 
@@ -984,10 +984,9 @@ public class GMS extends Protocol implements DiagnosticsHandler.ProbeHandler {
                 // fetch only my own digest
                 Digest digest=(Digest)down_prot.down(new Event(Event.GET_DIGEST, local_addr));
                 if(digest != null) {
-                    Message get_digest_rsp=new Message(msg.getSrc())
-                      .setFlag(OOB, Message.Flag.INTERNAL)
+                    Message get_digest_rsp=new Message(msg.getSrc()).setFlag(OOB, Message.Flag.INTERNAL)
                       .putHeader(this.id, new GmsHeader(GmsHeader.GET_DIGEST_RSP))
-                      .setBuffer(marshal(null, digest));
+                      .setPayload(marshal(null, digest));
                     down_prot.down(get_digest_rsp);
                 }
                 break;
@@ -1011,7 +1010,7 @@ public class GMS extends Protocol implements DiagnosticsHandler.ProbeHandler {
                 // either my view-id differs from sender's view-id, or sender's view-id is null: send view
                 log.trace("%s: received request for full view from %s, sending view %s", local_addr, msg.src(), view);
                 Message view_msg=new Message(msg.getSrc()).putHeader(id,new GmsHeader(GmsHeader.VIEW))
-                  .setBuffer(marshal(view, null)).setFlag(OOB, Message.Flag.INTERNAL);
+                  .setPayload(marshal(view, null)).setFlag(OOB, Message.Flag.INTERNAL);
                 down_prot.down(view_msg);
                 break;
 
@@ -1086,7 +1085,7 @@ public class GMS extends Protocol implements DiagnosticsHandler.ProbeHandler {
                 if(coord != null) {
                     ViewId view_id=view != null? view.getViewId() : null;
                     Message msg=new Message(coord).putHeader(id, new GmsHeader(GmsHeader.GET_CURRENT_VIEW))
-                      .setBuffer(marshal(view_id)).setFlag(OOB, Message.Flag.INTERNAL);
+                      .setPayload(marshal(view_id)).setFlag(OOB, Message.Flag.INTERNAL);
                     down_prot.down(msg);
                 }
                 return null; // don't pass the event further down
@@ -1161,7 +1160,7 @@ public class GMS extends Protocol implements DiagnosticsHandler.ProbeHandler {
         return retval;
     }
 
-    protected static Buffer marshal(final View view, final Digest digest) {
+    protected static ByteArrayPayload marshal(final View view, final Digest digest) {
         try {
             int expected_size=Global.SHORT_SIZE;
             if(view != null)
@@ -1177,7 +1176,7 @@ public class GMS extends Protocol implements DiagnosticsHandler.ProbeHandler {
             if(digest != null)
                 digest.writeTo(out, write_addrs);
 
-            return out.getBuffer();
+            return out.getPayload();
         }
         catch(Exception ex) {
             return null;
@@ -1188,22 +1187,22 @@ public class GMS extends Protocol implements DiagnosticsHandler.ProbeHandler {
         return Util.streamableToPayload(join_rsp);
     }
 
-    protected static Buffer marshal(Collection<? extends Address> mbrs) {
+    protected static Payload marshal(Collection<? extends Address> mbrs) {
         try {
             final ByteArrayDataOutputStream out=new ByteArrayDataOutputStream((int)Util.size(mbrs));
             Util.writeAddresses(mbrs, out);
-            return out.getBuffer();
+            return out.getPayload();
         }
         catch(Exception ex) {
             return null;
         }
     }
 
-    protected static Buffer marshal(final ViewId view_id) {
+    protected static ByteArrayPayload marshal(final ViewId view_id) {
         try {
             final ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(Util.size(view_id));
             Util.writeViewId(view_id, out);
-            return out.getBuffer();
+            return out.getPayload();
         }
         catch(Exception ex) {
             return null;
