@@ -1,6 +1,7 @@
 package org.jgroups.protocols.pbcast;
 
 import org.jgroups.Address;
+import org.jgroups.EmptyMessage;
 import org.jgroups.Message;
 import org.jgroups.View;
 import org.jgroups.util.Digest;
@@ -89,7 +90,7 @@ public abstract class ServerGmsImpl extends GmsImpl {
     }
 
     protected void sendLeaveMessage(Address coord, Address mbr) {
-        Message msg=new Message(coord).setFlag(Message.Flag.OOB)
+        Message msg=new EmptyMessage(coord).setFlag(Message.Flag.OOB)
           .putHeader(gms.getId(), new GMS.GmsHeader(GMS.GmsHeader.LEAVE_REQ, mbr));
         gms.getDownProtocol().down(msg);
     }

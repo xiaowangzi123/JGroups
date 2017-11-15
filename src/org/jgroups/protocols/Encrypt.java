@@ -1,16 +1,10 @@
 package org.jgroups.protocols;
 
-import org.jgroups.Address;
-import org.jgroups.Event;
-import org.jgroups.Message;
-import org.jgroups.View;
+import org.jgroups.*;
 import org.jgroups.annotations.ManagedAttribute;
 import org.jgroups.annotations.Property;
 import org.jgroups.stack.Protocol;
-import org.jgroups.util.AsciiString;
-import org.jgroups.util.BoundedHashMap;
-import org.jgroups.util.MessageBatch;
-import org.jgroups.util.Util;
+import org.jgroups.util.*;
 
 import javax.crypto.Cipher;
 import java.security.Key;
@@ -83,6 +77,9 @@ public abstract class Encrypt<E extends KeyStore.Entry> extends Protocol {
     // map to hold previous keys so we can decrypt some earlier messages if we need to
     protected Map<AsciiString,Cipher>       key_map;
 
+    protected MessageFactory                msg_factory;
+
+
     /**
      * Sets the key store entry used to configure this protocol.
      * @param entry a key store entry
@@ -101,7 +98,9 @@ public abstract class Encrypt<E extends KeyStore.Entry> extends Protocol {
     public <T extends Encrypt<E>> T asymAlgorithm(String alg)       {this.asym_algorithm=alg; return (T)this;}
     public byte[]                   symVersion()                    {return sym_version;}
     public <T extends Encrypt<E>> T localAddress(Address addr)      {this.local_addr=addr; return (T)this;}
+    public <T extends Encrypt<E>> T msgFactory(MessageFactory f)    {this.msg_factory=f; return (T)this;}
     @ManagedAttribute public String version()                       {return Util.byteArrayToHexString(sym_version);}
+
 
     public void init() throws Exception {
         int tmp=Util.getNextHigherPowerOfTwo(cipher_pool_size);
@@ -113,6 +112,9 @@ public abstract class Encrypt<E extends KeyStore.Entry> extends Protocol {
         encoding_ciphers=new ArrayBlockingQueue<>(cipher_pool_size);
         decoding_ciphers=new ArrayBlockingQueue<>(cipher_pool_size);
         initSymCiphers(sym_algorithm, secret_key);
+        TP transport=getTransport();
+        if(transport != null)
+            msg_factory=transport.getMessageFactory();
     }
 
 
@@ -135,7 +137,7 @@ public abstract class Encrypt<E extends KeyStore.Entry> extends Protocol {
         try {
             if(secret_key == null) {
                 log.trace("%s: discarded %s message to %s as secret key is null, hdrs: %s",
-                          local_addr, msg.dest() == null? "mcast" : "unicast", msg.dest(), msg.printHeaders());
+                          local_addr, msg.getDest() == null? "mcast" : "unicast", msg.getDest(), msg.printHeaders());
                 secretKeyNotAvailable();
                 return null;
             }
@@ -159,7 +161,17 @@ public abstract class Encrypt<E extends KeyStore.Entry> extends Protocol {
 
     public Object up(Message msg) {
         try {
-            return handleUpMessage(msg);
+            EncryptHeader hdr=msg.getHeader(this.id);
+            if(hdr == null) {
+                log.error("%s: received message without encrypt header from %s; dropping it", local_addr, msg.getSrc());
+                return null;
+            }
+            switch(hdr.type()) {
+                case EncryptHeader.ENCRYPT:
+                    return handleEncryptedMessage(msg, hdr.version);
+                default:
+                    return handleUpEvent(msg,hdr);
+            }
         }
         catch(Exception e) {
             log.warn("%s: exception occurred decrypting message", local_addr, e);
@@ -224,21 +236,6 @@ public abstract class Encrypt<E extends KeyStore.Entry> extends Protocol {
     }
 
 
-    protected Object handleUpMessage(Message msg) throws Exception {
-        EncryptHeader hdr=msg.getHeader(this.id);
-        if(hdr == null) {
-            log.error("%s: received message without encrypt header from %s; dropping it", local_addr, msg.src());
-            return null;
-        }
-        switch(hdr.type()) {
-            case EncryptHeader.ENCRYPT:
-                return handleEncryptedMessage(msg, hdr.version);
-            default:
-                return handleUpEvent(msg,hdr);
-        }
-    }
-
-
     protected Object handleEncryptedMessage(Message msg, byte[] version) throws Exception {
         if(!Arrays.equals(sym_version, version)) { // only check if msg needs to be queued if versions differ
             versionMismatch(msg);
@@ -247,10 +244,10 @@ public abstract class Encrypt<E extends KeyStore.Entry> extends Protocol {
 
         // try and decrypt the message - we need to copy msg as we modify its
         // buffer (http://jira.jboss.com/jira/browse/JGRP-538)
-        Message tmpMsg=decryptMessage(null, msg.copy()); // need to copy for possible xmits
+        Message tmpMsg=decryptMessage(null, msg.copy(true, true)); // need to copy for possible xmits
         if(tmpMsg != null)
             return up_prot.up(tmpMsg);
-        log.warn("%s: unrecognized cipher; discarding message from %s", local_addr, msg.src());
+        log.warn("%s: unrecognized cipher; discarding message from %s", local_addr, msg.getSrc());
         return null;
     }
 
@@ -294,38 +291,53 @@ public abstract class Encrypt<E extends KeyStore.Entry> extends Protocol {
                 handleUnknownVersion(hdr.version);
                 return null;
             }
-            log.trace("%s: decrypting msg from %s using previous cipher version", local_addr, msg.src());
-            return _decrypt(cipher, msg);
+            log.trace("%s: decrypting msg from %s using previous cipher version", local_addr, msg.getSrc());
+            return _decrypt(cipher, msg, hdr);
         }
-        return _decrypt(cipher, msg);
+        return _decrypt(cipher, msg, hdr);
     }
 
-    protected Message _decrypt(final Cipher cipher, Message msg) throws Exception {
-        if(msg.getLength() == 0)
+
+    protected Message _decrypt(final Cipher cipher, Message msg, EncryptHeader hdr) throws Exception {
+        if(!msg.hasPayload())
             return msg;
 
         byte[] decrypted_msg;
         if(cipher == null)
-            decrypted_msg=code(msg.getRawBuffer(), msg.getOffset(), msg.getLength(), true);
+            decrypted_msg=code(msg.getArray(), msg.getOffset(), msg.getLength(), true);
         else
-            decrypted_msg=cipher.doFinal(msg.getRawBuffer(), msg.getOffset(), msg.getLength());
-        return msg.setBuffer(decrypted_msg);
+            decrypted_msg=cipher.doFinal(msg.getArray(), msg.getOffset(), msg.getLength());
+
+        if(hdr.needsDeserialization())
+            msg=Util.messageFromBuffer(decrypted_msg, 0, decrypted_msg.length, msg_factory);
+        else
+            msg.setArray(decrypted_msg, 0, decrypted_msg.length);
+
+        if(msg.getDest() == null)
+            msg.setDest(msg.getDest());
+        if(msg.getSrc() == null)
+            msg.setSrc(msg.getSrc());
+        return msg;
     }
 
 
-    protected void encryptAndSend(Message msg) throws Exception {
+    protected Object encryptAndSend(Message msg) throws Exception {
         EncryptHeader hdr=new EncryptHeader(EncryptHeader.ENCRYPT, symVersion());
+        if(!msg.hasPayload()) // don't encrypt messages without payload
+            return down_prot.down((Message)msg.putHeader(id, hdr));
+
+        boolean serialize=!msg.hasArray();
+        ByteArray tmp=null;
+        byte[] buffer=serialize? (tmp=Util.messageToBuffer(msg)).getArray() : msg.getArray();
+        int offset=serialize? tmp.getOffset() : msg.getOffset();
+        int length=serialize? tmp.getLength() : msg.getLength();  // must be > 0 if we get here
+        byte[] encrypted_buffer=code(buffer, offset, length, false);
 
         // copy neeeded because same message (object) may be retransmitted -> prevent double encryption
-        Message msgEncrypted=msg.copy(false).putHeader(this.id, hdr);
-        if(msg.getLength() > 0)
-            msgEncrypted.setBuffer(code(msg.getRawBuffer(),msg.getOffset(),msg.getLength(),false));
-        else { // length is 0
-            byte[] payload=msg.getRawBuffer();
-            if(payload != null) // we don't encrypt empty buffers (https://issues.jboss.org/browse/JGRP-2153)
-                msgEncrypted.setBuffer(payload, msg.getOffset(), msg.getLength());
-        }
-        down_prot.down(msgEncrypted);
+        Message encrypted_msg=(serialize? new BytesMessage(msg.getDest()) : msg.copy(false, true))
+          .putHeader(this.id, hdr.needsDeserialization(serialize))
+          .setArray(encrypted_buffer, 0, encrypted_buffer.length);
+        return down_prot.down(encrypted_msg);
     }
 
 
@@ -372,15 +384,22 @@ public abstract class Encrypt<E extends KeyStore.Entry> extends Protocol {
                         batch.remove(msg);
                         return;
                     }
-                    Message tmpMsg=decryptMessage(cipher, msg.copy()); // need to copy for possible xmits
-                    if(tmpMsg != null)
+                    Message tmpMsg=decryptMessage(cipher, msg.copy(true, true)); // need to copy for possible xmits
+                    if(tmpMsg != null) {
+
+                        // todo: tmp_msg == msg?
+                        if(tmpMsg == msg) {
+                            System.out.println("**** tmpMsg == msg!");
+                        }
+
                         batch.replace(msg, tmpMsg);
+                    }
                     else
                         batch.remove(msg);
                 }
                 catch(Exception e) {
                     log.error("%s: failed decrypting message from %s (offset=%d, length=%d, buf.length=%d): %s, headers are %s",
-                              local_addr, msg.getSrc(), msg.getOffset(), msg.getLength(), msg.getRawBuffer().length, e, msg.printHeaders());
+                              local_addr, msg.getSrc(), msg.getOffset(), msg.getLength(), msg.getArray().length, e, msg.printHeaders());
                     batch.remove(msg);
                 }
             }

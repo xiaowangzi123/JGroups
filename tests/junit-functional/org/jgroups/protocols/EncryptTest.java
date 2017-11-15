@@ -1,16 +1,13 @@
 package org.jgroups.protocols;
 
-import org.jgroups.Address;
-import org.jgroups.JChannel;
-import org.jgroups.Message;
-import org.jgroups.View;
+import org.jgroups.*;
 import org.jgroups.conf.ClassConfigurator;
 import org.jgroups.demos.KeyStoreGenerator;
 import org.jgroups.protocols.pbcast.GMS;
 import org.jgroups.protocols.pbcast.NAKACK2;
 import org.jgroups.protocols.pbcast.NakAckHeader2;
 import org.jgroups.stack.ProtocolStack;
-import org.jgroups.util.Buffer;
+import org.jgroups.util.ByteArray;
 import org.jgroups.util.ByteArrayDataOutputStream;
 import org.jgroups.util.MyReceiver;
 import org.jgroups.util.Util;
@@ -49,7 +46,7 @@ public abstract class EncryptTest {
         Util.waitUntilAllChannelsHaveSameView(10000, 500, a, b, c);
         rogue=createRogue("rogue").connect(cluster_name);
         Stream.of(a,b,c,rogue).forEach(ch -> System.out.printf("%s: %s\n", ch.getAddress(), ch.getView()));
-        System.out.println("");
+        System.out.print("\n");
     }
 
     @Test(enabled=false) protected void destroy() {Util.close(rogue, c, b, a);}
@@ -76,25 +73,26 @@ public abstract class EncryptTest {
 
     /** Same as above, but all message payloads are null */
     public void testRegularMessageReceptionWithNullMessages() throws Exception {
-        a.send(new Message(null));
-        b.send(new Message(null));
-        c.send(new Message(null));
+        a.send(new EmptyMessage(null));
+        b.send(new EmptyMessage(null));
+        c.send(new EmptyMessage(null));
         for(int i=0; i < 10; i++) {
             if(ra.size() == 3 && rb.size() == 3 && rc.size() == 3)
                 break;
             Util.sleep(500);
         }
-        Stream.of(ra, rb, rc).map(MyReceiver::list).map(l -> l.stream().map(msg -> (String)msg.getObject())
+        Stream.of(ra, rb, rc).map(MyReceiver::list).map(l -> l.stream().map(Object::toString)
           .collect(ArrayList::new, ArrayList::add, (x, y) -> {})).forEach(System.out::println);
         assertForEachReceiver(r -> r.size() == 3);
-        assertForEachMessage(msg -> msg.getRawBuffer() == null);
+        assertForEachMessage(msg -> msg.getArray() == null);
+        assertForEachMessage(msg -> !msg.hasPayload());
     }
 
     /** Same as above, but all message payloads are empty (0-length String) */
     public void testRegularMessageReceptionWithEmptyMessages() throws Exception {
-        a.send(new Message(null).setBuffer(new byte[0]));
-        b.send(new Message(null).setBuffer(new byte[0]));
-        c.send(new Message(null).setBuffer(new byte[0]));
+        a.send(new BytesMessage(null).setArray(new byte[0], 0, 0));
+        b.send(new BytesMessage(null).setArray(new byte[0], 0, 0));
+        c.send(new BytesMessage(null).setArray(new byte[0], 0, 0));
         for(int i=0; i < 10; i++) {
             if(ra.size() == 3 && rb.size() == 3 && rc.size() == 3)
                 break;
@@ -102,7 +100,7 @@ public abstract class EncryptTest {
         }
         assertForEachReceiver(r -> r.size() == 3);
         assertForEachMessage(msg -> msg.getLength() == 0);
-        assertForEachMessage(msg -> Arrays.equals(msg.getRawBuffer(), new byte[0]));
+        assertForEachMessage(msg -> Arrays.equals(msg.getArray(), new byte[0]));
     }
 
 
@@ -164,14 +162,15 @@ public abstract class EncryptTest {
         secretKey.setAccessible(true);
         Util.setField(secretKey, encrypt, secret_key);
         encrypt.init();
+        encrypt.msgFactory(new DefaultMessageFactory());
 
         short encrypt_id=ClassConfigurator.getProtocolId(SYM_ENCRYPT.class);
         EncryptHeader hdr=new EncryptHeader(EncryptHeader.ENCRYPT, encrypt.symVersion());
-        Message msg=new Message(null).putHeader(encrypt_id, hdr);
+        Message msg=new BytesMessage(null).putHeader(encrypt_id, hdr);
 
         byte[] buf="hello from rogue".getBytes();
         byte[] encrypted_buf=encrypt.code(buf, 0, buf.length, false);
-        msg.setBuffer(encrypted_buf);
+        msg.setArray(encrypted_buf, 0, encrypted_buf.length);
 
         rogue.send(msg);
 
@@ -289,8 +288,8 @@ public abstract class EncryptTest {
         View rogue_view=View.create(rogue_addr, a.getView().getViewId().getId()+1,
                                     rogue_addr, a.getAddress(), b.getAddress(), c.getAddress());
 
-        Message view_change_msg=new Message().putHeader(GMS_ID, new GMS.GmsHeader(GMS.GmsHeader.VIEW))
-          .setBuffer(marshal(rogue_view));
+        Message view_change_msg=new BytesMessage(null, marshal(rogue_view))
+          .putHeader(GMS_ID, new GMS.GmsHeader(GMS.GmsHeader.VIEW));
         rogue.send(view_change_msg);
 
         for(int i=0; i < 10; i++) {
@@ -311,7 +310,7 @@ public abstract class EncryptTest {
     }
 
 
-    protected static Buffer marshal(final View view) throws Exception {
+    protected static ByteArray marshal(final View view) throws Exception {
         ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(Util.size(view));
         out.writeShort(1);
         if(view != null)

@@ -118,7 +118,7 @@ public class RequestCorrelator {
      * @param req A request (usually the object that invokes this method). Its methods {@code receiveResponse()} and
      *            {@code suspect()} will be invoked when a message has been received or a member is suspected.
      */
-    public void sendRequest(Collection<Address> dest_mbrs, Buffer data, Request req, RequestOptions opts) throws Exception {
+    public void sendRequest(Collection<Address> dest_mbrs, ByteArray data, Request req, RequestOptions opts) throws Exception {
         if(transport == null) {
             log.warn("transport is not available !");
             return;
@@ -129,8 +129,8 @@ public class RequestCorrelator {
         Header hdr=opts.hasExclusionList()? new MultiDestinationHeader(Header.REQ, 0, this.corr_id, opts.exclusionList())
           : new Header(Header.REQ, 0, this.corr_id);
 
-        Message msg=new Message(null, data).putHeader(this.corr_id, hdr)
-          .setFlag(opts.flags()).setTransientFlag(opts.transientFlags());
+        Message msg=new BytesMessage(null, data).putHeader(this.corr_id, hdr)
+          .setFlag(opts.flags(), false).setFlag(opts.transientFlags(), true);
 
         if(req != null) { // sync
             long req_id=REQUEST_ID.getAndIncrement();
@@ -153,15 +153,15 @@ public class RequestCorrelator {
 
         if(opts.anycasting()) {
             if(opts.useAnycastAddresses()) {
-                transport.down(msg.dest(new AnycastAddress(dest_mbrs)));
+                transport.down((Message)msg.setDest(new AnycastAddress(dest_mbrs)));
             }
             else {
                 boolean first=true;
                 for(Address mbr: dest_mbrs) {
-                    Message copy=(first? msg : msg.copy(true)).dest(mbr);
+                    Message copy=(first? msg : msg.copy(true, true)).setDest(mbr);
                     first=false;
-                    if(!mbr.equals(local_addr) && copy.isTransientFlagSet(Message.TransientFlag.DONT_LOOPBACK))
-                        copy.clearTransientFlag(Message.TransientFlag.DONT_LOOPBACK);
+                    if(!mbr.equals(local_addr) && copy.isFlagSet(Message.TransientFlag.DONT_LOOPBACK))
+                        copy.clearFlag(Message.TransientFlag.DONT_LOOPBACK);
                     transport.down(copy);
                 }
             }
@@ -171,22 +171,22 @@ public class RequestCorrelator {
     }
 
     /** Sends a request to a single destination */
-    public void sendUnicastRequest(Address dest, Buffer data, Request req, RequestOptions opts) throws Exception {
+    public void sendUnicastRequest(Address dest, ByteArray data, Request req, RequestOptions opts) throws Exception {
         if(transport == null) {
             if(log.isWarnEnabled()) log.warn("transport is not available !");
             return;
         }
 
         Header hdr=new Header(Header.REQ, 0, this.corr_id);
-        Message msg=new Message(dest, data).putHeader(this.corr_id, hdr)
-          .setFlag(opts.flags()).setTransientFlag(opts.transientFlags());
+        Message msg=new BytesMessage(dest, data).putHeader(this.corr_id, hdr)
+          .setFlag(opts.flags(), false).setFlag(opts.transientFlags(), true);
 
         if(req != null) { // sync RPC
             long req_id=REQUEST_ID.getAndIncrement();
             req.requestId(req_id);
             hdr.requestId(req_id); // set the request-id only for *synchronous RPCs*
             if(log.isTraceEnabled())
-                log.trace("%s: invoking unicast RPC [req-id=%d] on %s", local_addr, req_id, msg.dest());
+                log.trace("%s: invoking unicast RPC [req-id=%d] on %s", local_addr, req_id, msg.getDest());
             requests.putIfAbsent(req_id, req);
             // make sure no view is received before we add ourself as a view handler (https://issues.jboss.org/browse/JGRP-1428)
             req.viewChange(view);
@@ -300,7 +300,7 @@ public class RequestCorrelator {
             // if we are part of the exclusion list, then we discard the request (addressed to different members)
             Address[] exclusion_list=((MultiDestinationHeader)hdr).exclusion_list;
             if(exclusion_list != null && local_addr != null && Util.contains(local_addr, exclusion_list)) {
-                log.trace("%s: dropped req from %s as we are in the exclusion list, hdr=%s", local_addr, msg.src(), hdr);
+                log.trace("%s: dropped req from %s as we are in the exclusion list, hdr=%s", local_addr, msg.getSrc(), hdr);
                 return true; // don't pass this message further up
             }
         }
@@ -318,7 +318,7 @@ public class RequestCorrelator {
                 // if we are part of the exclusion list, then we discard the request (addressed to different members)
                 Address[] exclusion_list=((MultiDestinationHeader)hdr).exclusion_list;
                 if(exclusion_list != null && local_addr != null && Util.contains(local_addr, exclusion_list)) {
-                    log.trace("%s: dropped req from %s as we are in the exclusion list, hdr=%s", local_addr, msg.src(), hdr);
+                    log.trace("%s: dropped req from %s as we are in the exclusion list, hdr=%s", local_addr, msg.getSrc(), hdr);
                     batch.remove(msg);
                     continue; // don't pass this message further up
                 }
@@ -360,7 +360,7 @@ public class RequestCorrelator {
             case Header.EXC_RSP:
                 Request req=requests.get(hdr.req_id);
                 if(req != null)
-                    handleResponse(req, msg.src(), msg.getRawBuffer(), msg.getOffset(), msg.getLength(), hdr.type == Header.EXC_RSP);
+                    handleResponse(req, msg.getSrc(), msg.getArray(), msg.getOffset(), msg.getLength(), hdr.type == Header.EXC_RSP);
                 break;
 
             default:
@@ -417,7 +417,7 @@ public class RequestCorrelator {
 
 
     protected void sendReply(final Message req, final long req_id, Object reply, boolean is_exception) {
-        Buffer rsp_buf;
+        ByteArray rsp_buf;
         try {  // retval could be an exception, or a real value
             rsp_buf=replyToBuffer(reply, marshaller);
         }
@@ -435,9 +435,16 @@ public class RequestCorrelator {
                 return;
             }
         }
-        Message rsp=req.makeReply().setFlag(req.getFlags()).setBuffer(rsp_buf)
+        Message rsp=makeReply(req).setFlag(req.getFlags(false), false).setArray(rsp_buf)
           .clearFlag(Message.Flag.RSVP, Message.Flag.INTERNAL); // JGRP-1940
         sendResponse(rsp, req_id, is_exception);
+    }
+
+    protected static Message makeReply(Message msg) {
+        Message reply=msg.create().get().setDest(msg.getSrc());
+        if(msg.getDest() != null)
+            reply.setSrc(msg.getDest());
+        return reply;
     }
 
     protected void sendResponse(Message rsp, long req_id, boolean is_exception) {
@@ -448,7 +455,7 @@ public class RequestCorrelator {
         transport.down(rsp);
     }
 
-    protected static Buffer replyToBuffer(Object obj, Marshaller marshaller) throws Exception {
+    protected static ByteArray replyToBuffer(Object obj, Marshaller marshaller) throws Exception {
         int estimated_size=marshaller != null? marshaller.estimatedSize(obj) : 50;
         ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(estimated_size, true);
         if(marshaller != null)

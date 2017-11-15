@@ -133,15 +133,15 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
     /** Keep track of when a SEND_FIRST_SEQNO message was sent to a given sender */
     protected ExpiryCache<Address>         last_sync_sent=null;
 
-    protected static final Message         DUMMY_OOB_MSG=new Message().setFlag(Message.Flag.OOB);
+    protected static final Message         DUMMY_OOB_MSG=new EmptyMessage().setFlag(Message.Flag.OOB);
 
-    protected final Predicate<Message>     drop_oob_and_dont_loopback_msgs_filter= msg ->
+    protected final Predicate<Message>     drop_oob_and_dont_loopback_msgs_filter=msg ->
       msg != null && msg != DUMMY_OOB_MSG
-        && (!msg.isFlagSet(Message.Flag.OOB) || msg.setTransientFlagIfAbsent(Message.TransientFlag.OOB_DELIVERED))
-        && !(msg.isTransientFlagSet(Message.TransientFlag.DONT_LOOPBACK) && local_addr != null && local_addr.equals(msg.src()));
+        && (!msg.isFlagSet(Message.Flag.OOB) || msg.setFlagIfAbsent(Message.TransientFlag.OOB_DELIVERED))
+        && !(msg.isFlagSet(Message.TransientFlag.DONT_LOOPBACK) && local_addr != null && local_addr.equals(msg.getSrc()));
 
     protected static final Predicate<Message> dont_loopback_filter=
-      msg -> msg != null && msg.isTransientFlagSet(Message.TransientFlag.DONT_LOOPBACK);
+      msg -> msg != null && msg.isFlagSet(Message.TransientFlag.DONT_LOOPBACK);
 
     protected static final BiConsumer<MessageBatch,Message> BATCH_ACCUMULATOR=MessageBatch::add;
 
@@ -403,7 +403,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
                     handleResendingOfFirstMessage(sender, hdr.timestamp());
                     break;
                 case UnicastHeader3.XMIT_REQ:  // received ACK for previously sent message
-                    handleXmitRequest(sender, Util.streamableFromBuffer(SeqnoList::new, msg.getRawBuffer(), msg.getOffset(), msg.getLength()));
+                    handleXmitRequest(sender, Util.streamableFromBuffer(SeqnoList::new, msg.getArray(), msg.getOffset(), msg.getLength()));
                     break;
                 case UnicastHeader3.CLOSE:
                     log.trace(local_addr + "%s <-- CLOSE(%s: conn-id=%s)", local_addr, sender, hdr.conn_id);
@@ -513,7 +513,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
                 for(LongTuple<Message> tuple: list) {
                     long    seq=tuple.getVal1();
                     Message msg=win.get(seq); // we *have* to get the message, because loopback means we didn't add it to win !
-                    if(msg != null && msg.isFlagSet(Message.Flag.OOB) && msg.setTransientFlagIfAbsent(Message.TransientFlag.OOB_DELIVERED))
+                    if(msg != null && msg.isFlagSet(Message.Flag.OOB) && msg.setFlagIfAbsent(Message.TransientFlag.OOB_DELIVERED))
                         oob_batch.add(msg);
                 }
                 deliverBatch(oob_batch);
@@ -577,12 +577,12 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
             return null;
         }
 
-        if(msg.src() == null)
-            msg.src(local_addr); // this needs to be done so we can check whether the message sender is the local_addr
+        if(msg.getSrc() == null)
+            msg.setSrc(local_addr); // this needs to be done so we can check whether the message sender is the local_addr
 
         SenderEntry entry=getSenderEntry(dst);
 
-        boolean dont_loopback_set=msg.isTransientFlagSet(Message.TransientFlag.DONT_LOOPBACK)
+        boolean dont_loopback_set=msg.isFlagSet(Message.TransientFlag.DONT_LOOPBACK)
           && dst.equals(local_addr);
         short send_conn_id=entry.connId();
         long seqno=entry.sent_msgs_seqno.getAndIncrement();
@@ -671,8 +671,18 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
 
     /** Sends a retransmit request to the given sender */
     protected void retransmit(SeqnoList missing, Address sender) {
-        Message xmit_msg=new Message(sender).setBuffer(Util.streamableToBuffer(missing))
-          .setFlag(Message.Flag.OOB, Message.Flag.INTERNAL).putHeader(id, UnicastHeader3.createXmitReqHeader());
+
+        ByteArray array=null;
+        try {
+            array=Util.streamableToBuffer(missing);
+        }
+        catch(Exception e) {
+            log.error("%s: serialization failure: %s", local_addr, e);
+            return;
+        }
+
+        Message xmit_msg=new BytesMessage(sender).setArray(array).setFlag(Message.Flag.OOB, Message.Flag.INTERNAL)
+          .putHeader(id, UnicastHeader3.createXmitReqHeader());
         if(is_trace)
             log.trace("%s: sending XMIT_REQ (%s) to %s", local_addr, missing, sender);
         down_prot.down(xmit_msg);
@@ -753,7 +763,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
         // http://jira.jboss.com/jira/browse/JGRP-377
         if(msg.isFlagSet(Message.Flag.OOB)) {
             msg=win.get(seqno); // we *have* to get a message, because loopback means we didn't add it to win !
-            if(msg != null && msg.isFlagSet(Message.Flag.OOB) && msg.setTransientFlagIfAbsent(Message.TransientFlag.OOB_DELIVERED))
+            if(msg != null && msg.isFlagSet(Message.Flag.OOB) && msg.setFlagIfAbsent(Message.TransientFlag.OOB_DELIVERED))
                 deliverMessage(msg, sender, seqno);
 
             // we don't steal work if the message is internal (https://issues.jboss.org/browse/JGRP-1733)
@@ -915,7 +925,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
 
     protected ReceiverEntry createReceiverEntry(Address sender, long seqno, short conn_id) {
         Table<Message> table=new Table<>(xmit_table_num_rows, xmit_table_msgs_per_row, seqno-1,
-                                                xmit_table_resize_factor, xmit_table_max_compaction_time);
+                                         xmit_table_resize_factor, xmit_table_max_compaction_time);
         ReceiverEntry entry=new ReceiverEntry(table, conn_id);
         ReceiverEntry entry2=recv_table.putIfAbsent(sender, entry);
         if(entry2 != null)
@@ -964,7 +974,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
             // We need to copy the UnicastHeader and put it back into the message because Message.copy() doesn't copy
             // the headers and therefore we'd modify the original message in the sender retransmission window
             // (https://jira.jboss.org/jira/browse/JGRP-965)
-            Message copy=rsp.copy();
+            Message copy=rsp.copy(true, true);
             UnicastHeader3 hdr=copy.getHeader(this.id);
             UnicastHeader3 newhdr=hdr.copy();
             newhdr.first=true;
@@ -1050,7 +1060,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
     protected void sendAck(Address dst, long seqno, short conn_id) {
         if(!running) // if we are disconnected, then don't send any acks which throw exceptions on shutdown
             return;
-        Message ack=new Message(dst).setFlag(Message.Flag.INTERNAL).
+        Message ack=new EmptyMessage(dst).setFlag(Message.Flag.INTERNAL).
           putHeader(this.id, UnicastHeader3.createAckHeader(seqno, conn_id, timestamper.incrementAndGet()));
         if(is_trace)
             log.trace("%s --> ACK(%s: #%d)", local_addr, dst, seqno);
@@ -1076,7 +1086,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
 
     protected void sendRequestForFirstSeqno(Address dest) {
         if(last_sync_sent.addIfAbsentOrExpired(dest)) {
-            Message msg=new Message(dest).setFlag(Message.Flag.OOB)
+            Message msg=new EmptyMessage(dest).setFlag(Message.Flag.OOB)
               .putHeader(this.id, UnicastHeader3.createSendFirstSeqnoHeader(timestamper.incrementAndGet()));
             log.trace("%s --> SEND_FIRST_SEQNO(%s)", local_addr, dest);
             down_prot.down(msg);
@@ -1084,7 +1094,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
     }
 
     public void sendClose(Address dest, short conn_id) {
-        Message msg=new Message(dest).setFlag(Message.Flag.INTERNAL).putHeader(id, UnicastHeader3.createCloseHeader(conn_id));
+        Message msg=new EmptyMessage(dest).setFlag(Message.Flag.INTERNAL).putHeader(id, UnicastHeader3.createCloseHeader(conn_id));
         log.trace("%s --> CLOSE(%s, conn-id=%d)", local_addr, dest, conn_id);
         down_prot.down(msg);
     }
@@ -1197,7 +1207,7 @@ public class UNICAST3 extends Protocol implements AgeOutCache.Handler<Address> {
     /** Compares 2 timestamps, handles numeric overflow */
     protected static int compare(int ts1, int ts2) {
         int diff=ts1 - ts2;
-        return diff < 0? -1 : diff > 0? 1 : 0;
+        return Integer.compare(diff, 0);
     }
 
     @SafeVarargs

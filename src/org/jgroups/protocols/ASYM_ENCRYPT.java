@@ -208,7 +208,7 @@ public class ASYM_ENCRYPT extends Encrypt<KeyStore.PrivateKeyEntry> {
                         batch.remove(msg);
                     }
                     catch(Throwable t) {
-                        log.error("failed passing up message from %s: %s, ex=%s", msg.src(), msg.printHeaders(), t);
+                        log.error("failed passing up message from %s: %s, ex=%s", msg.getSrc(), msg.printHeaders(), t);
                     }
                     continue;
                 }
@@ -277,10 +277,10 @@ public class ASYM_ENCRYPT extends Encrypt<KeyStore.PrivateKeyEntry> {
                 break;
             case EncryptHeader.SECRET_KEY_RSP:
                 handleSecretKeyResponse(msg, hdr.version());
-                sendNewKeyserverAck(msg.src());
+                sendNewKeyserverAck(msg.getSrc());
                 break;
             case EncryptHeader.NEW_KEYSERVER:
-                Address sender=msg.src();
+                Address sender=msg.getSrc();
                 if(!inView(sender, "key server %s is not in the current view %s; ignoring NEW_KEYSERVER msg"))
                     return null;
                 if(!Arrays.equals(sym_version, hdr.version)) // only send if sym_versions differ
@@ -290,7 +290,7 @@ public class ASYM_ENCRYPT extends Encrypt<KeyStore.PrivateKeyEntry> {
                 break;
             case EncryptHeader.NEW_KEYSERVER_ACK:
                 if(key_requesters != null)
-                    key_requesters.add(msg.src(), true);
+                    key_requesters.add(msg.getSrc(), true);
                 break;
         }
         return null;
@@ -314,11 +314,11 @@ public class ASYM_ENCRYPT extends Encrypt<KeyStore.PrivateKeyEntry> {
     }
 
     protected void handleSecretKeyRequest(final Message msg) {
-        if(!inView(msg.src(), "key requester %s is not in current view %s; ignoring key request"))
+        if(!inView(msg.getSrc(), "key requester %s is not in current view %s; ignoring key request"))
             return;
         log.debug("%s: received secret key request from %s", local_addr, msg.getSrc());
         try {
-            PublicKey tmpKey=generatePubKey(msg.getBuffer());
+            PublicKey tmpKey=generatePubKey(msg.getArray());
             sendSecretKey(secret_key, tmpKey, msg.getSrc());
         }
         catch(Exception e) {
@@ -328,23 +328,23 @@ public class ASYM_ENCRYPT extends Encrypt<KeyStore.PrivateKeyEntry> {
 
 
     protected void handleSecretKeyResponse(final Message msg, final byte[] key_version) {
-        if(!inView(msg.src(), "ignoring secret key sent by %s which is not in current view %s"))
+        if(!inView(msg.getSrc(), "ignoring secret key sent by %s which is not in current view %s"))
             return;
 
         if(Arrays.equals(sym_version, key_version)) {
             log.debug("%s: secret key (version %s) already installed, ignoring key response from %s",
-                      local_addr, Util.byteArrayToHexString(key_version), msg.src());
+                      local_addr, Util.byteArrayToHexString(key_version), msg.getSrc());
             return;
         }
         try {
-            SecretKey tmp=decodeKey(msg.getBuffer());
+            SecretKey tmp=decodeKey(msg.getArray(), msg.getOffset(), msg.getLength());
             if(tmp == null)
                 sendKeyRequest(key_server_addr);      // unable to understand response, let's try again
             else
-                setKeys(msg.src(), tmp, key_version); // otherwise set the received key as the shared key
+                setKeys(msg.getSrc(), tmp, key_version); // otherwise set the received key as the shared key
         }
         catch(Exception e) {
-            log.warn("%s: unable to process key received from %s: %s", local_addr, msg.src(), e);
+            log.warn("%s: unable to process key received from %s: %s", local_addr, msg.getSrc(), e);
         }
     }
 
@@ -414,7 +414,7 @@ public class ASYM_ENCRYPT extends Encrypt<KeyStore.PrivateKeyEntry> {
                     if(!targets.isEmpty()) {  // https://issues.jboss.org/browse/JGRP-2203
                         key_requesters=new ResponseCollectorTask<Boolean>(targets)
                           .setPeriodicTask(c -> {
-                              Message msg=new Message(null).setTransientFlag(Message.TransientFlag.DONT_LOOPBACK)
+                              Message msg=new EmptyMessage(null).setFlag(Message.TransientFlag.DONT_LOOPBACK)
                                 .putHeader(id, new EncryptHeader(EncryptHeader.NEW_KEYSERVER, sym_version));
                               down_prot.down(msg);
                           })
@@ -471,7 +471,7 @@ public class ASYM_ENCRYPT extends Encrypt<KeyStore.PrivateKeyEntry> {
 
     protected void sendSecretKey(Key secret_key, PublicKey public_key, Address source) throws Exception {
         byte[] encryptedKey=encryptSecretKey(secret_key, public_key);
-        Message newMsg=new Message(source, encryptedKey).src(local_addr)
+        Message newMsg=new BytesMessage(source, encryptedKey).setSrc(local_addr)
           .putHeader(this.id, new EncryptHeader(EncryptHeader.SECRET_KEY_RSP, symVersion()));
         log.debug("%s: sending secret key response to %s (version: %s)", local_addr, source, Util.byteArrayToHexString(sym_version));
         down_prot.down(newMsg);
@@ -508,22 +508,22 @@ public class ASYM_ENCRYPT extends Encrypt<KeyStore.PrivateKeyEntry> {
 
         log.debug("%s: asking %s for the secret key (my version: %s)",
                   local_addr, key_server, Util.byteArrayToHexString(sym_version));
-        Message newMsg=new Message(key_server, key_pair.getPublic().getEncoded()).src(local_addr)
+        Message newMsg=new BytesMessage(key_server, key_pair.getPublic().getEncoded()).setSrc(local_addr)
           .putHeader(this.id,new EncryptHeader(EncryptHeader.SECRET_KEY_REQ, null));
         down_prot.down(newMsg);
     }
 
     protected void sendNewKeyserverAck(Address dest) {
-        Message msg=new Message(dest).putHeader(id, new EncryptHeader(EncryptHeader.NEW_KEYSERVER_ACK, null));
+        Message msg=new EmptyMessage(dest).putHeader(id, new EncryptHeader(EncryptHeader.NEW_KEYSERVER_ACK, null));
         down_prot.down(msg);
     }
 
 
-    protected SecretKeySpec decodeKey(byte[] encodedKey) throws Exception {
+    protected SecretKeySpec decodeKey(byte[] encodedKey, int offset, int length) throws Exception {
         byte[] keyBytes;
 
         synchronized(this) {
-            keyBytes=asym_cipher.doFinal(encodedKey);
+            keyBytes=asym_cipher.doFinal(encodedKey, offset, length);
         }
 
         try {

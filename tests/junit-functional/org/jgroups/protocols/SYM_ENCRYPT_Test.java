@@ -2,9 +2,10 @@ package org.jgroups.protocols;
 
 import org.jgroups.Global;
 import org.jgroups.JChannel;
+import org.jgroups.protocols.pbcast.GMS;
 import org.jgroups.protocols.pbcast.NAKACK2;
-import org.jgroups.stack.ProtocolStack;
-import org.jgroups.util.Util;
+import org.jgroups.protocols.pbcast.STABLE;
+import org.jgroups.stack.Protocol;
 import org.testng.annotations.AfterMethod;
 import org.testng.annotations.BeforeMethod;
 import org.testng.annotations.Test;
@@ -77,7 +78,6 @@ public class SYM_ENCRYPT_Test extends EncryptTest {
 
 
     protected JChannel create(String name) throws Exception {
-        JChannel ch=new JChannel(Util.getTestStack()).name(name);
         SYM_ENCRYPT encrypt;
         try {
             encrypt=createENCRYPT("keystore/defaultStore.keystore", DEF_PWD);
@@ -85,8 +85,17 @@ public class SYM_ENCRYPT_Test extends EncryptTest {
         catch(Throwable t) {
             encrypt=createENCRYPT("defaultStore.keystore", DEF_PWD);
         }
-        ch.getProtocolStack().insertProtocol(encrypt, ProtocolStack.Position.BELOW, NAKACK2.class);
-        return ch;
+        Protocol[] protocols={
+          new SHARED_LOOPBACK(),
+          new SHARED_LOOPBACK_PING(),
+          encrypt,
+          new NAKACK2(),
+          new UNICAST3(),
+          new STABLE(),
+          new GMS().joinTimeout(1000),
+          new FRAG2().fragSize(8000)
+        };
+        return new JChannel(protocols).name(name);
     }
 
 

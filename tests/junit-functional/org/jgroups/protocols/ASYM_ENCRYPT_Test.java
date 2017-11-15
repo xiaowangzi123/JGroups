@@ -3,12 +3,10 @@ package org.jgroups.protocols;
 import org.jgroups.*;
 import org.jgroups.auth.MD5Token;
 import org.jgroups.conf.ClassConfigurator;
-import org.jgroups.protocols.pbcast.DeltaView;
-import org.jgroups.protocols.pbcast.GMS;
-import org.jgroups.protocols.pbcast.JoinRsp;
-import org.jgroups.protocols.pbcast.NAKACK2;
+import org.jgroups.protocols.pbcast.*;
+import org.jgroups.stack.Protocol;
 import org.jgroups.stack.ProtocolStack;
-import org.jgroups.util.Buffer;
+import org.jgroups.util.ByteArray;
 import org.jgroups.util.ByteArrayDataOutputStream;
 import org.jgroups.util.Util;
 import org.testng.annotations.AfterMethod;
@@ -116,7 +114,7 @@ public class ASYM_ENCRYPT_Test extends EncryptTest {
 
 
         // now fabricate a KEY_REQUEST message and send it to the key server (A)
-        Message newMsg=new Message(a.getAddress(), encrypt.keyPair().getPublic().getEncoded()).src(rogue.getAddress())
+        Message newMsg=new BytesMessage(a.getAddress(), encrypt.keyPair().getPublic().getEncoded()).setSrc(rogue.getAddress())
           .putHeader(encrypt.getId(),new EncryptHeader(EncryptHeader.SECRET_KEY_REQ, encrypt.symVersion()));
 
         discard.setDiscardAll(false);
@@ -157,8 +155,8 @@ public class ASYM_ENCRYPT_Test extends EncryptTest {
                                     a.getAddress(),b.getAddress(),c.getAddress(),rogue.getAddress());
         JoinRsp join_rsp=new JoinRsp(rogue_view, null);
         GMS.GmsHeader gms_hdr=new GMS.GmsHeader(GMS.GmsHeader.JOIN_RSP);
-        Message rogue_join_rsp=new Message(b.getAddress(), rogue.getAddress()).putHeader(GMS_ID, gms_hdr)
-          .setBuffer(GMS.marshal(join_rsp)).setFlag(Message.Flag.NO_RELIABILITY); // bypasses NAKACK2 / UNICAST3
+        Message rogue_join_rsp=new BytesMessage(b.getAddress(), rogue.getAddress()).putHeader(GMS_ID, gms_hdr)
+          .setArray(GMS.marshal(join_rsp)).setFlag(Message.Flag.NO_RELIABILITY); // bypasses NAKACK2 / UNICAST3
         rogue.down(rogue_join_rsp);
         for(int i=0; i < 10; i++) {
             if(b.getView().size() > 3)
@@ -196,7 +194,7 @@ public class ASYM_ENCRYPT_Test extends EncryptTest {
         MergeView merge_view=new MergeView(a.getAddress(), a.getView().getViewId().getId()+5,
                                            Arrays.asList(a.getAddress(), b.getAddress(), c.getAddress(), rogue.getAddress()), null);
         GMS.GmsHeader hdr=new GMS.GmsHeader(GMS.GmsHeader.INSTALL_MERGE_VIEW, a.getAddress());
-        Message merge_view_msg=new Message(null, marshalView(merge_view)).putHeader(GMS_ID, hdr)
+        Message merge_view_msg=new BytesMessage(null, marshalView(merge_view)).putHeader(GMS_ID, hdr)
           .setFlag(Message.Flag.NO_RELIABILITY);
         System.out.printf("** %s: trying to install MergeView %s in all members\n", rogue.getAddress(), merge_view);
         rogue.down(merge_view_msg);
@@ -308,14 +306,19 @@ public class ASYM_ENCRYPT_Test extends EncryptTest {
     }
 
     protected JChannel create(String name) throws Exception {
-        JChannel ch=new JChannel(Util.getTestStack()).name(name);
-        ProtocolStack stack=ch.getProtocolStack();
-        Encrypt encrypt=createENCRYPT();
-        stack.insertProtocol(encrypt, ProtocolStack.Position.BELOW, NAKACK2.class);
-        AUTH auth=new AUTH().setAuthCoord(true).setAuthToken(new MD5Token("mysecret")); // .setAuthCoord(false);
-        stack.insertProtocol(auth, ProtocolStack.Position.BELOW, GMS.class);
-        stack.findProtocol(GMS.class).setValue("join_timeout", 2000); // .setValue("view_ack_collection_timeout", 10);
-        return ch;
+        Protocol[] protocols={
+          new SHARED_LOOPBACK(),
+          new SHARED_LOOPBACK_PING(),
+          createENCRYPT(),
+          new NAKACK2(),
+          new UNICAST3(),
+          new STABLE(),
+          new AUTH().setAuthCoord(true).setAuthToken(new MD5Token("mysecret")),
+          new GMS().joinTimeout(1000),
+          new FRAG2().fragSize(8000)
+        };
+
+        return new JChannel(protocols).name(name);
     }
 
     protected static void printSymVersion(JChannel... channels) {
@@ -332,11 +335,12 @@ public class ASYM_ENCRYPT_Test extends EncryptTest {
     protected static ASYM_ENCRYPT createENCRYPT() throws Exception {
         ASYM_ENCRYPT encrypt=new ASYM_ENCRYPT();
         encrypt.init();
+        encrypt.msgFactory(new DefaultMessageFactory());
         return encrypt;
     }
 
 
-    protected static Buffer marshalView(final View view) throws Exception {
+    protected static ByteArray marshalView(final View view) throws Exception {
         final ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(Global.SHORT_SIZE + view.serializedSize());
         out.writeShort(determineFlags(view));
         view.writeTo(out);
@@ -366,7 +370,7 @@ public class ASYM_ENCRYPT_Test extends EncryptTest {
         protected Object handleUpEvent(Message msg, EncryptHeader hdr) {
             if(hdr.type() == EncryptHeader.SECRET_KEY_RSP) {
                 try {
-                    key=decodeKey(msg.getBuffer());
+                    key=decodeKey(msg.getArray(), msg.getOffset(), msg.getLength());
                     System.out.printf("received secret key %s !\n", key);
                 }
                 catch(Exception e) {
