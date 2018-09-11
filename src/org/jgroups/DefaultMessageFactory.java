@@ -18,6 +18,7 @@ public class DefaultMessageFactory implements MessageFactory {
         creators[Message.OBJ_MSG_SERIALIZABLE]=ObjectMessageSerializable::new;
         creators[Message.COMPOSITE_MSG]=CompositeMessage::new;
         creators[Message.FRAG_MSG]=FragmentedMessage::new;
+        creators[Message.NIO_MSG]=NioMessage::new;
     }
 
     public <T extends Message> T create(byte type) {

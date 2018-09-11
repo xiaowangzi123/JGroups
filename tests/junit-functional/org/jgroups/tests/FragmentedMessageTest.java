@@ -5,6 +5,7 @@ import org.jgroups.util.*;
 import org.testng.annotations.Test;
 
 import java.io.*;
+import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.function.Consumer;
 
@@ -66,6 +67,21 @@ public class FragmentedMessageTest {
         _testFragmentation(original_msg, verifier);
     }
 
+    public void testFragmentationWithNioHeapMessage() throws Exception {
+        Message original_msg=new NioMessage(dest, ByteBuffer.wrap(array)).setSrc(src);
+        Consumer<Message> verifier=m -> verify(m.getArray());
+        _testFragmentation(original_msg, verifier);
+    }
+
+    public void testFragmentationWithNioDirectMessage() throws Exception {
+        ByteBuffer buf=ByteBuffer.allocateDirect(array.length);
+        buf.put(array).flip();
+        Message original_msg=new NioMessage(dest, buf).setSrc(src);
+        Consumer<Message> verifier=m -> verify(getArray(((NioMessage)m).getBuffer()));
+        _testFragmentation(original_msg, verifier);
+    }
+
+
     protected void _testFragmentation(Message original_msg, Consumer<Message> verifier) throws Exception {
         int serialized_size=original_msg.size();
         ByteArrayDataOutputStream out=new ByteArrayDataOutputStream(serialized_size);
@@ -93,6 +109,12 @@ public class FragmentedMessageTest {
         new_msg.readFrom(input);
         assert original_msg.getLength() == new_msg.getLength();
         verifier.accept(new_msg);
+    }
+
+    protected static byte[] getArray(ByteBuffer direct_bb) {
+        byte[] retval=new byte[direct_bb.remaining()];
+        direct_bb.get(retval).flip();
+        return retval;
     }
 
 

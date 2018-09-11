@@ -10,6 +10,7 @@ import org.testng.annotations.Test;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.Serializable;
+import java.nio.ByteBuffer;
 import java.util.Collection;
 import java.util.Objects;
 import java.util.function.Predicate;
@@ -25,8 +26,7 @@ import java.util.stream.Stream;
 public class FRAG4_Test {
     protected JChannel         a, b;
     protected final MyReceiver<Message> r1=new MyReceiver<>().rawMsgs(true), r2=new MyReceiver<>().rawMsgs(true);
-    protected static final int FRAG_SIZE=10_000;
-    protected static short     ID=5678;
+    protected static final int    FRAG_SIZE=10_000;
     protected static final byte[] array=generate(FRAG_SIZE*2);
 
     @BeforeMethod
@@ -68,7 +68,6 @@ public class FRAG4_Test {
         });
     }
 
-
     public void testObjectMessageSerializable() throws Exception {
         MySizeData obj=new MySizeData(322649, array);
         Message m1=new ObjectMessageSerializable(null, obj), m2=new ObjectMessageSerializable(b.getAddress(), obj);
@@ -97,6 +96,13 @@ public class FRAG4_Test {
             Person p2=m.getObject();
             return p2.name.equals("Bela Ban") && p2.age == p.age && verify(p.buf);
         });
+    }
+
+    public void testNioHeapMessage() throws Exception {
+        NioMessage m1=new NioMessage(null, ByteBuffer.wrap(array)),
+          m2=new NioMessage(b.getAddress(), ByteBuffer.wrap(array));
+        send(m1, m2);
+        assertForAllMessages(m -> verify(m.getArray()));
     }
 
 
@@ -167,13 +173,7 @@ public class FRAG4_Test {
         protected int    num;
         protected byte[] arr;
 
-        public MyData() {
-        }
-
-        public MyData(int num, int length) {
-            this.num=num;
-            this.arr=new byte[length];
-        }
+        public MyData() {}
 
         public MyData(int num, byte[] buf) {
             this.num=num;
@@ -210,18 +210,8 @@ public class FRAG4_Test {
 
 
     public static class MySizeData extends MyData implements SizeStreamable {
-
-        public MySizeData() {
-        }
-
-        public MySizeData(int num, int length) {
-            super(num, length);
-        }
-
-        public MySizeData(int num, byte[] buf) {
-            super(num, buf);
-        }
-
+        public MySizeData() {}
+        public MySizeData(int num, byte[] buf) {super(num, buf);}
         public int serializedSize() {
             return Global.INT_SIZE*2 + (array != null? array.length : 0);
         }

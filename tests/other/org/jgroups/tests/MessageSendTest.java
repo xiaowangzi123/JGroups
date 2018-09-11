@@ -14,6 +14,7 @@ import org.jgroups.util.Util;
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.Serializable;
+import java.nio.ByteBuffer;
 import java.util.concurrent.TimeoutException;
 import java.util.function.Supplier;
 
@@ -64,6 +65,16 @@ public class MessageSendTest extends ReceiverAdapter {
 
             Person p=new Person("Bela Ban", 53, new byte[len]);
             msg=new ObjectMessageSerializable(null, p);
+            send(msg);
+
+            ByteBuffer b=ByteBuffer.wrap(new byte[len]);
+            msg=new NioMessage(null, b);
+            send(msg);
+
+            byte[] tmp=new byte[len];
+            b=ByteBuffer.allocateDirect(len).put(tmp);
+            b.flip();
+            msg=new NioMessage(null, b);
             send(msg);
         }
         Util.close(ch);
