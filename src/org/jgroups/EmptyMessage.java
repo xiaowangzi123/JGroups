@@ -7,7 +7,7 @@ import org.jgroups.util.Util;
 import java.util.function.Supplier;
 
 /**
- * Message without payload; optimized for sending only headers
+ * A {@link Message} without a payload; optimized for sending only headers (e.g. heartbeats in failure detection)
  * @author Bela Ban
  * @since  5.0
  */

@@ -8,7 +8,10 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * Interface for all message types.
+ * A Message is used to send data to members of a group. It contains the address of the sender, the destination address,
+ * (typically) a payload, flags and a list of headers.
+ * <br/>
+ * Subclasses define different types of payloads, e.g. byte arrays, ByteBuffers, Objects etc.
  * @author Bela Ban
  * @since  5.0
  */

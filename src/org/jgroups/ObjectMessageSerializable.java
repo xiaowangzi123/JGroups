@@ -13,8 +13,9 @@ import java.util.function.Supplier;
 
 /**
  * A {@link Message} containing an object as payload. The object needs to be serializable or externalizable, and it
- * will be serialized into serialized_obj when needed (e.g. when {@link #getLength()} or {@link #writeTo(DataOutput)}
- * is called.<br/>
+ * will be serialized into a byte array when needed (e.g. when {@link #getLength()} or {@link #writeTo(DataOutput)}
+ * is called.
+ * <br/>
  * Note that objects that implement {@link SizeStreamable} should use the parent class {@link ObjectMessage}, as it
  * has a smaller memory footprint.
  * <br/>

@@ -9,8 +9,9 @@ import java.io.DataOutput;
 import java.util.function.Supplier;
 
 /**
- * A {@link Message} containing a {@link SizeStreamable} as payload. The object won't get
- * serialized until it is sent by the transport.<br/>
+ * A {@link Message} with an object (implementing {@link SizeStreamable}) as payload. The object won't get
+ * serialized until it is sent by the transport.
+ * <br/>
  * Note that the object passed to the constructor (or set with {@link #setObject(Object)}) must not be changed after
  * the creation of an {@link ObjectMessage}.
  * @since  5.0

@@ -12,12 +12,8 @@ import java.io.DataOutput;
 import java.util.Map;
 
 /**
- * A Message encapsulates data sent to members of a group. It contains among other things the
- * address of the sender, the destination address, a payload (byte buffer) and a list of headers.
- * Headers are added by protocols on the sender side and removed by protocols on the receiver's side.
- * <p>
- * The byte buffer can point to a reference, and we can subset it using index and length. However,
- * when the message is serialized, we only write the bytes between index and length.
+ * A common superclass for all {@link Message} implementations. It contains functionality to manage headers, flags and
+ * destination and source addresses.
  *
  * @since  5.0
  * @author Bela Ban

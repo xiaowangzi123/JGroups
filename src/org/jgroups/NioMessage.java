@@ -12,15 +12,10 @@ import java.nio.ByteBuffer;
 import java.util.function.Supplier;
 
 /**
- * A Message encapsulates data sent to members of a group. It contains among other things the
- * address of the sender, the destination address, a payload ({@link java.nio.ByteBuffer}) and a list of headers.
- * Headers are added by protocols on the sender side and removed by protocols on the receiver's side.
- * <p>
- * The byte buffer can point to a reference, and we can subset it using index and length. However,
- * when the message is serialized, we only write the bytes between index and length.
+ * A {@link Message} with a heap-based ({@link java.nio.ByteBuffer}) as payload.<br/>
  * <br/>
- * Note that an NioMessage must not be modified after sending it (ie. {@link JChannel#send(Message)}; serialization
- * depends on position and limit to be correct.
+ * Note that the payload of an NioMessage must not be modified after sending it (ie. {@link JChannel#send(Message)};
+ * serialization depends on position and limit to be correct.
  *
  * @since  5.0
  * @author Bela Ban
@@ -32,10 +27,10 @@ public class NioMessage extends BaseMessage {
 
 
     /**
-    * Constructs a message given a destination address
-    * @param dest The Address of the receiver. If it is null, then the message is sent to all cluster members.
+     * Constructs a message given a destination address
+     * @param dest The Address of the receiver. If it is null, then the message is sent to all cluster members.
      *            Otherwise, it is sent to a single member.
-    */
+     */
     public NioMessage(Address dest) {
         setDest(dest);
         headers=createHeaders(Util.DEFAULT_HEADERS);

@@ -8,36 +8,26 @@ import org.jgroups.util.Util;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.nio.ByteBuffer;
 import java.util.function.Supplier;
 
 /**
- * A {@link Message} containing a byte array as payload.
+ * A {@link Message} with a direct {@link ByteBuffer} as payload.
  * <br/>
- * The byte array can point to a reference, and we can subset it using index and length. When the message is serialized,
- * only the bytes between index and length are written.
+ * Note that the byte buffer of an NioMessage must not be modified after sending it (ie. {@link JChannel#send(Message)};
+ * serialization depends on position and limit to be correct.
  *
  * @since  5.0
  * @author Bela Ban
  */
-public class BytesMessage extends BaseMessage {
-
-    /** The payload */
-    protected byte[]            buf;
-
-    /** The index into the payload */
-    protected int               offset;
-
-    /** The number of bytes in the buffer */
-    protected int               length;
-
-
+public class NioDirectMessage extends NioMessage {
 
     /**
-    * Constructs a message given a destination address
-    * @param dest The Address of the receiver. If it is null, then the message is sent to all cluster members.
+     * Constructs a message given a destination address
+     * @param dest The Address of the receiver. If it is null, then the message is sent to all cluster members.
      *            Otherwise, it is sent to a single member.
-    */
-    public BytesMessage(Address dest) {
+     */
+    public NioDirectMessage(Address dest) {
         setDest(dest);
         headers=createHeaders(Util.DEFAULT_HEADERS);
     }
@@ -49,37 +39,9 @@ public class BytesMessage extends BaseMessage {
     * @param buf The payload. Note that this buffer must not be modified (e.g. buf[0]='x' is not
     *            allowed) since we don't copy the contents.
     */
-    public BytesMessage(Address dest, byte[] buf) {
-        this(dest, buf, 0, buf != null? buf.length : 0);
-    }
-
-
-   /**
-    * Constructs a message. The index and length parameters provide a reference to a byte buffer, rather than a copy,
-    * and refer to a subset of the buffer. This is important when we want to avoid copying. When the message is
-    * serialized, only the subset is serialized.</p>
-    * <em>
-    * Note that the byte[] buffer passed as argument must not be modified. Reason: if we retransmit the
-    * message, it would still have a ref to the original byte[] buffer passed in as argument, and so we would
-    * retransmit a changed byte[] buffer !
-    * </em>
-    *
-    * @param dest The Address of the receiver. If it is null, then the message is sent to all cluster members.
-    *             Otherwise, it is sent to a single member.
-    * @param buf A reference to a byte buffer
-    * @param offset The index into the byte buffer
-    * @param length The number of bytes to be used from <tt>buf</tt>. Both index and length are checked
-    *               for array index violations and an ArrayIndexOutOfBoundsException will be thrown if invalid
-    */
-    public BytesMessage(Address dest, byte[] buf, int offset, int length) {
+    public NioDirectMessage(Address dest, ByteBuffer buf) {
         this(dest);
-        setArray(buf, offset, length);
-    }
-
-
-    public BytesMessage(Address dest, ByteArray buf) {
-        this(dest);
-        setArray(buf);
+        this.buf=buf;
     }
 
 
@@ -90,40 +52,32 @@ public class BytesMessage extends BaseMessage {
     * @param obj The object that will be marshalled into the byte buffer. Has to be serializable (e.g. implementing
     *            Serializable, Externalizable or Streamable, or be a basic type (e.g. Integer, Short etc)).
     */
-    public BytesMessage(Address dest, Object obj) {
+    public NioDirectMessage(Address dest, Object obj) {
         this(dest);
         setObject(obj);
     }
 
 
-    public BytesMessage() {
+    public NioDirectMessage() {
         this(true);
     }
 
 
-    public BytesMessage(boolean create_headers) {
+    public NioDirectMessage(boolean create_headers) {
         if(create_headers)
             headers=createHeaders(Util.DEFAULT_HEADERS);
     }
 
-    public Supplier<? extends Message> create() {
-        return BytesMessage::new;
-    }
+    public Supplier<? extends Message> create() {return NioDirectMessage::new;}
+    public ByteBuffer getBuffer()               {return buf;}
+    public byte       getType()                 {return Message.NIO_MSG;}
+    public boolean    hasPayload()              {return buf != null;}
+    public boolean    hasArray()                {return buf != null && buf.hasArray();}
+    public int        getOffset()               {return hasArray()? buf.arrayOffset() : 0;}
+    public int        getLength()               {return buf != null? buf.remaining() : 0;}
 
-    public byte    getType()                 {return Message.BYTES_MSG;}
-    public boolean hasPayload()              {return buf != null && length > 0;}
-    public boolean hasArray()                {return true;}
-    public int     getOffset()               {return offset;}
-    public int     getLength()               {return length;}
-
-
-    /**
-     * Returns a <em>reference</em> to the payload (byte buffer). Note that this buffer should not be
-     * modified as we do not copy the buffer on copy() or clone(): the buffer of the copied message
-     * is simply a reference to the old buffer.<br/>
-     * Even if offset and length are used: we return the <em>entire</em> buffer, not a subset.
-     */
-    public byte[] getArray()                 {return buf;}
+    /** Returns the array of the buffer if the ByteBuffer has an array, null otherwise */
+    public byte[]     getArray()                {return buf.hasArray()? buf.array() : null;}
 
 
 
@@ -140,17 +94,7 @@ public class BytesMessage extends BaseMessage {
      * @param length The number of bytes
      */
     public <T extends Message> T setArray(byte[] b, int offset, int length) {
-        buf=b;
-        if(buf != null) {
-            if(offset < 0 || offset > buf.length)
-                throw new ArrayIndexOutOfBoundsException(offset);
-            if((offset + length) > buf.length)
-                throw new ArrayIndexOutOfBoundsException((offset+length));
-            this.offset=offset;
-            this.length=length;
-        }
-        else
-            this.offset=this.length=0;
+        buf=ByteBuffer.wrap(b, offset, length);
         return (T)this;
     }
 
@@ -161,11 +105,8 @@ public class BytesMessage extends BaseMessage {
      * retransmit a changed byte[] buffer !
      */
     public <T extends Message> T setArray(ByteArray buf) {
-        if(buf != null) {
-            this.buf=buf.getArray();
-            this.offset=buf.getOffset();
-            this.length=buf.getLength();
-        }
+        if(buf != null)
+            this.buf=ByteBuffer.wrap(buf.getArray(), buf.getOffset(), buf.getLength());
         return (T)this;
     }
 
@@ -208,7 +149,7 @@ public class BytesMessage extends BaseMessage {
      */
     public <T extends Object> T getObject(ClassLoader loader) {
         try {
-            return Util.objectFromByteBuffer(buf, offset, length, loader);
+            return hasArray()? Util.objectFromByteBuffer(getArray(), getOffset(), getLength(), loader) : null;
         }
         catch(Exception ex) {
             throw new IllegalArgumentException(ex);
@@ -218,12 +159,10 @@ public class BytesMessage extends BaseMessage {
 
 
    /**
-    * Create a copy of the message. If offset and length are used (to refer to another buffer), the
-    * copy will contain only the subset offset and length point to, copying the subset into the new
-    * copy.<p/>
+    * Create a copy of the message.<br/>
     * Note that for headers, only the arrays holding references to the headers are copied, not the headers themselves !
     * The consequence is that the headers array of the copy hold the *same* references as the original, so do *not*
-    * modify the headers ! If you want to change a header, copy it and call {@link BytesMessage#putHeader(short,Header)} again.
+    * modify the headers ! If you want to change a header, copy it and call {@link NioDirectMessage#putHeader(short,Header)} again.
     *
     * @param copy_buffer
     * @param copy_headers
@@ -231,8 +170,7 @@ public class BytesMessage extends BaseMessage {
     * @return Message with specified data
     */
     public <T extends Message> T copy(boolean copy_buffer, boolean copy_headers) {
-        BytesMessage retval=createMessage();
-        retval.dest_addr=dest_addr;
+        NioDirectMessage retval=new NioDirectMessage(dest_addr);
         retval.src_addr=src_addr;
         short tmp_flags=this.flags;
         byte tmp_tflags=this.transient_flags;
@@ -240,7 +178,7 @@ public class BytesMessage extends BaseMessage {
         retval.transient_flags=tmp_tflags;
 
         if(copy_buffer && buf != null)
-            retval.setArray(buf, offset, length);
+            retval.buf=buf.duplicate();
 
         //noinspection NonAtomicOperationOnVolatileField
         retval.headers=copy_headers && headers != null? Headers.copy(this.headers) : createHeaders(Util.DEFAULT_HEADERS);
@@ -252,9 +190,7 @@ public class BytesMessage extends BaseMessage {
 
     /* ----------------------------------- Interface Streamable  ------------------------------- */
 
-    public int size() {
-        return super.size() +sizeOfPayload();
-    }
+    public int size() {return super.size() +sizeOfPayload();}
 
 
     @Override public void writeTo(DataOutput out) throws Exception {
@@ -280,29 +216,49 @@ public class BytesMessage extends BaseMessage {
     }
 
     protected int sizeOfPayload() {
-        int retval=Global.INT_SIZE; // length
-        if(buf != null)
-            retval+=length;        // number of bytes in the buffer
-        return retval;
+        return Global.INT_SIZE + getLength() + (buf != null? Global.BYTE_SIZE : 0);
     }
 
     protected void writePayload(DataOutput out) throws Exception {
-        out.writeInt(buf != null? length : -1);
-        if(buf != null)
-            out.write(buf, offset, length);
+        out.writeInt(buf != null? getLength() : -1);
+        if(buf != null) {
+            out.writeBoolean(buf.isDirect());
+            if(buf.hasArray()) {
+                byte[] buffer=buf.array();
+                int offset=buf.arrayOffset()+buf.position(), length=buf.remaining();
+                out.write(buffer, offset, length);
+            }
+            else {
+                // We need to duplicate the buffer, or else writing its contents to the output stream would modify
+                // position; this would break potential retransmission
+                // We still need a transfer buffer as there is no way to transfer contents of a ByteBuffer directly to
+                // an output stream; once we have a transport that directly supports ByteBuffers, we can change this
+                ByteBuffer copy=buf.duplicate();
+                byte[] transfer_buf=new byte[Math.max(copy.remaining()/10, 128)];
+                while(copy.remaining() > 0) {
+                    int bytes=Math.min(transfer_buf.length, copy.remaining());
+                    copy.get(transfer_buf, 0, bytes);
+                    out.write(transfer_buf, 0, bytes);
+                }
+            }
+        }
     }
 
     protected void readPayload(DataInput in) throws Exception {
         int len=in.readInt();
-        if(len >= 0) {
-            buf=new byte[len];
-            in.readFully(buf, 0, len);
-            length=len;
+        if(len < 0)
+            return;
+        boolean is_direct=in.readBoolean();
+        byte[] tmp=new byte[len];
+        in.readFully(tmp, 0, tmp.length);
+        if(is_direct) {
+            // todo: replace with factory; so users can provide their own allocation mechanism (e.g. pooling)
+            buf=ByteBuffer.allocateDirect(len)
+              .put(tmp, 0, tmp.length);
+            buf.flip();
         }
-    }
-
-    protected <T extends BytesMessage> T createMessage() {
-        return (T)new BytesMessage(false);
+        else
+            buf=ByteBuffer.wrap(tmp, 0, tmp.length);
     }
 
 
