@@ -125,21 +125,27 @@ public class NAKACK_RetransmitTest {
 
         public void receive(Message msg) {
             Integer num=msg.getObject();
-            list.add(num);
+            synchronized(list) {
+                list.add(num);
+            }
         }
 
-        public List<Integer> getList() {return list;}
+        public List<Integer> getList() {
+            synchronized(list) {
+                return new ArrayList<>(list);
+            }
+        }
     }
 
 
-    protected void stopRetransmission(JChannel ... channels) throws Exception {
+    protected static void stopRetransmission(JChannel... channels) throws Exception {
         for(JChannel ch: channels) {
             NAKACK2 nak=ch.getProtocolStack().findProtocol(NAKACK2.class);
             STOP_RETRANSMISSION.invoke(nak);
         }
     }
 
-    protected void startRetransmission(JChannel ... channels) throws Exception {
+    protected static void startRetransmission(JChannel... channels) throws Exception {
         for(JChannel ch: channels) {
             NAKACK2 nak=ch.getProtocolStack().findProtocol(NAKACK2.class);
             START_RETRANSMISSION.invoke(nak);

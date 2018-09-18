@@ -98,6 +98,7 @@ public class NioMessage extends BaseMessage {
     public int        getOffset()               {return hasArray()? buf.arrayOffset()+buf.position() : 0;}
     public int        getLength()               {return buf != null? buf.remaining() : 0;}
     public byte[]     getArray()                {return hasArray()? buf.array() : null;}
+    public NioMessage create(Address dest)      {return new NioMessage(dest);}
 
 
 
@@ -189,7 +190,7 @@ public class NioMessage extends BaseMessage {
     * @return Message with specified data
     */
     public <T extends Message> T copy(boolean copy_buffer, boolean copy_headers) {
-        NioMessage retval=new NioMessage(dest_addr);
+        NioMessage retval=create(dest_addr);
         retval.src_addr=src_addr;
         short tmp_flags=this.flags;
         byte tmp_tflags=this.transient_flags;

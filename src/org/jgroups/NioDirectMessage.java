@@ -2,8 +2,6 @@
 package org.jgroups;
 
 
-import org.jgroups.util.ByteArray;
-import org.jgroups.util.Headers;
 import org.jgroups.util.Util;
 
 import java.io.DataInput;
@@ -63,11 +61,9 @@ public class NioDirectMessage extends NioMessage {
         super(dest, obj);
     }
 
-
     public NioDirectMessage() {
         super();
     }
-
 
     public NioDirectMessage(boolean create_headers) {
         super(create_headers);
@@ -81,62 +77,7 @@ public class NioDirectMessage extends NioMessage {
     /** Returns a copy of the remaining data in {@link ByteBuffer} (if the buffer is not null). Note that this
      * operation is expensive as a new array will be allocated, so use sparingly! */
     public byte[]                      getArray()               {return hasArray()? buf.array() : getContents();}
-
-
-
-    /**
-     * Sets the internal buffer to point to a subset of a given buffer.<br/>
-     * Note that the byte[] buffer passed as argument must not be modified: if we retransmit the message, it would still
-     * have a ref to the original byte[] array passed in as argument, and so we would retransmit a changed byte[] array!
-     *
-     * @param b The reference to a given buffer. If null, we'll reset the buffer to null
-     * @param offset The initial position
-     * @param length The number of bytes
-     */
-    public <T extends Message> T setArray(byte[] b, int offset, int length) {
-        if(b != null)
-            buf=createBuffer(b, offset, length);
-        return (T)this;
-    }
-
-    /**
-     * Sets the buffer<p/>
-     * Note that the byte[] buffer passed as argument must not be modified. Reason: if we retransmit the
-     * message, it would still have a ref to the original byte[] buffer passed in as argument, and so we would
-     * retransmit a changed byte[] buffer !
-     */
-    public <T extends Message> T setArray(ByteArray ba) {
-        if(ba != null)
-            this.buf=createBuffer(ba.getArray(), ba.getOffset(), ba.getLength());
-        return (T)this;
-    }
-
-
-
-    /**
-     * Takes an object and uses Java serialization to generate the byte[] buffer which is set in the
-     * message. Parameter 'obj' has to be serializable (e.g. implementing Serializable,
-     * Externalizable or Streamable, or be a basic type (e.g. Integer, Short etc)).
-     */
-    public <T extends Message> T setObject(Object obj) {
-        if(obj == null) return (T)this;
-        if(obj instanceof byte[])
-            return setArray((byte[])obj, 0, ((byte[])obj).length);
-        if(obj instanceof ByteArray)
-            return setArray((ByteArray)obj);
-        try {
-            byte[] tmp=Util.objectToByteBuffer(obj);
-            return setArray(tmp, 0, tmp.length);
-        }
-        catch(Exception ex) {
-            throw new IllegalArgumentException(ex);
-        }
-    }
-
-
-    public <T extends Object> T getObject() {
-        return getObject(null);
-    }
+    public NioMessage                  create(Address dest)     {return new NioDirectMessage(dest);}
 
     /**
      * Uses custom serialization to create an object from the buffer of the message. Note that this is dangerous when
@@ -161,76 +102,10 @@ public class NioDirectMessage extends NioMessage {
     }
 
 
-   /* public <T extends Object> T getObject(ClassLoader loader) {
-        byte[] array=hasArray()? getArray() : getContents();
-
-        try {
-            return hasArray()? Util.objectFromByteBuffer(array, getOffset(), getLength(), loader) :
-              Util.objectFromByteBuffer(array, 0, array.length, loader);
-        }
-        catch(Exception ex) {
-            throw new IllegalArgumentException(ex);
-        }
-    }
-*/
-
-
-   /**
-    * Create a copy of the message.<br/>
-    * Note that for headers, only the arrays holding references to the headers are copied, not the headers themselves !
-    * The consequence is that the headers array of the copy hold the *same* references as the original, so do *not*
-    * modify the headers ! If you want to change a header, copy it and call {@link NioDirectMessage#putHeader(short,Header)} again.
-    *
-    * @param copy_buffer
-    * @param copy_headers
-    *           Copy the headers
-    * @return Message with specified data
-    */
-    public <T extends Message> T copy(boolean copy_buffer, boolean copy_headers) {
-        NioDirectMessage retval=new NioDirectMessage(dest_addr);
-        retval.src_addr=src_addr;
-        short tmp_flags=this.flags;
-        byte tmp_tflags=this.transient_flags;
-        retval.flags=tmp_flags;
-        retval.transient_flags=tmp_tflags;
-
-        if(copy_buffer && buf != null)
-            retval.buf=buf.duplicate();
-
-        //noinspection NonAtomicOperationOnVolatileField
-        retval.headers=copy_headers && headers != null? Headers.copy(this.headers) : createHeaders(Util.DEFAULT_HEADERS);
-        return (T)retval;
-    }
-
-
 
 
     /* ----------------------------------- Interface Streamable  ------------------------------- */
 
-    public int size() {return super.size() +sizeOfPayload();}
-
-
-    @Override public void writeTo(DataOutput out) throws Exception {
-        super.writeTo(out);
-        writePayload(out);
-    }
-
-
-   /**
-    * Writes the message to the output stream, but excludes the dest and src addresses unless the
-    * src address given as argument is different from the message's src address
-    * @param excluded_headers Don't marshal headers that are part of excluded_headers
-    */
-    @Override public void writeToNoAddrs(Address src, DataOutput out, short... excluded_headers) throws Exception {
-        super.writeToNoAddrs(src, out, excluded_headers);
-        writePayload(out);
-    }
-
-
-    @Override public void readFrom(DataInput in) throws Exception {
-        super.readFrom(in);
-        readPayload(in);
-    }
 
     protected int sizeOfPayload() {
         return super.sizeOfPayload() + (buf != null? Global.BYTE_SIZE : 0); // use_heap_memory_on_read;
