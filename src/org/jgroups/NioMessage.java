@@ -91,6 +91,9 @@ public class NioMessage extends BaseMessage {
         super(create_headers);
     }
 
+    /** Returns the byte buffer. Do not read from/write to it, or else retransmissions will fail!
+        Use {@link ByteBuffer#duplicate()} before, to create a copy, if the buffer needs to be read from */
+    public ByteBuffer                  getBuf() {return buf;}
     public Supplier<? extends Message> create() {return NioMessage::new;}
     public byte       getType()                 {return Message.NIO_MSG;}
     public boolean    hasPayload()              {return buf != null;}

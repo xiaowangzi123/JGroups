@@ -58,15 +58,14 @@ public class ObjectMessage extends BaseMessage {
         return ObjectMessage::new;
     }
 
-    public byte    getType()       {return Message.OBJ_MSG;}
-    public boolean hasPayload()    {return obj != null;}
-    public boolean hasArray()      {return false;}
-    public int     getOffset()     {return 0;}
-    public int     getLength()     {return obj != null? objSize() : 0;}
-    public byte[]  getArray()      {throw new UnsupportedOperationException();}
-
-    public <T extends Message> T setArray(byte[] b, int offset, int length) {throw new UnsupportedOperationException();}
-    public <T extends Message> T setArray(ByteArray buf)                    {throw new UnsupportedOperationException();}
+    public byte                  getType()                            {return Message.OBJ_MSG;}
+    public boolean               hasPayload()                         {return obj != null;}
+    public boolean               hasArray()                           {return false;}
+    public int                   getOffset()                          {return 0;}
+    public int                   getLength()                          {return obj != null? objSize() : 0;}
+    public byte[]                getArray()                           {throw new UnsupportedOperationException();}
+    public <T extends Message> T setArray(byte[] b, int off, int len) {throw new UnsupportedOperationException();}
+    public <T extends Message> T setArray(ByteArray buf)              {throw new UnsupportedOperationException();}
 
     /** Sets the object. Note that the object should not be changed after sending the message.
      * @param obj The object to be set; has to implement {@link SizeStreamable}
