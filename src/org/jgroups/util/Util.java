@@ -578,6 +578,48 @@ public class Util {
         }
     }
 
+    /**
+     * Parses an object from a {@link ByteBuffer}. Note that this changes the position of the buffer, so it this is
+     * not desired, use {@link ByteBuffer#duplicate()} to create a copy and pass the copy to this method.
+     */
+    public static <T extends Object> T objectFromByteBuffer(ByteBuffer buffer, ClassLoader loader) throws Exception {
+        if(buffer == null) return null;
+        byte type=buffer.get();
+        switch(type) {
+            case TYPE_NULL:    return null;
+            case TYPE_STREAMABLE:
+                DataInput in=new ByteBufferInputStream(buffer);
+                return readGenericStreamable(in, loader);
+            case TYPE_SERIALIZABLE: // the object is Externalizable or Serializable
+                InputStream in_stream=new ByteBufferInputStream(buffer);
+                try(ObjectInputStream oin=new ObjectInputStreamWithClassloader(in_stream, loader)) {
+                    return (T)oin.readObject();
+                }
+            case TYPE_BOOLEAN: return (T)(Boolean)(buffer.get() == 1);
+            case TYPE_BYTE:    return (T)(Byte)buffer.get();
+            case TYPE_CHAR:    return (T)(Character)Bits.readChar(buffer);
+            case TYPE_DOUBLE:  return (T)(Double)Bits.readDouble(buffer);
+            case TYPE_FLOAT:   return (T)(Float)Bits.readFloat(buffer);
+            case TYPE_INT:     return (T)(Integer)Bits.readInt(buffer);
+            case TYPE_LONG:    return (T)(Long)Bits.readLong(buffer);
+            case TYPE_SHORT:   return (T)(Short)Bits.readShort(buffer);
+            case TYPE_BYTEARRAY:
+                byte[] tmp=new byte[buffer.remaining()];
+                buffer.get(tmp);
+                return (T)tmp;
+            case TYPE_STRING:
+                tmp=new byte[buffer.remaining()];
+                buffer.get(tmp);
+                return (T)new String(tmp);
+            case TYPE_UTF_STRING:
+                in=new ByteBufferInputStream(buffer);
+                return (T)in.readUTF();
+            default:
+                throw new IllegalArgumentException("type " + type + " is invalid");
+        }
+    }
+
+
 
     /**
      * Serializes/Streams an object into a byte buffer.
@@ -831,6 +873,8 @@ public class Util {
         return streamableFromByteBuffer(factory, buffer, 0, buffer.length);
     }
 
+
+
     /**
      * Poor man's serialization of an exception. Serializes only the message, stack trace and cause (not suppressed exceptions)
      */
@@ -998,9 +1042,25 @@ public class Util {
         return retval;
     }
 
+    public static <T extends Streamable> T streamableFromByteBuffer(Class<? extends Streamable> cl, ByteBuffer buffer) throws Exception {
+        if(buffer == null) return null;
+        DataInput in=new ByteBufferInputStream(buffer);
+        T retval=(T)cl.newInstance();
+        retval.readFrom(in);
+        return retval;
+    }
+
     public static <T extends Streamable> T streamableFromByteBuffer(Supplier<T> factory, byte[] buffer, int offset, int length) throws Exception {
         if(buffer == null) return null;
         DataInput in=new ByteArrayDataInputStream(buffer,offset,length);
+        T retval=factory.get();
+        retval.readFrom(in);
+        return retval;
+    }
+
+    public static <T extends Streamable> T streamableFromByteBuffer(Supplier<T> factory, ByteBuffer buffer) throws Exception {
+        if(buffer == null) return null;
+        DataInput in=new ByteBufferInputStream(buffer);
         T retval=factory.get();
         retval.readFrom(in);
         return retval;

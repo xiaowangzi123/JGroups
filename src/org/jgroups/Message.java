@@ -18,7 +18,8 @@ import java.util.function.Supplier;
 public interface Message extends SizeStreamable, Constructable<Message> {
 
     // The type of the message. Cannot be an enum, as users can register additional types
-    byte BYTES_MSG=0, EMPTY_MSG=1, OBJ_MSG=2, OBJ_MSG_SERIALIZABLE=3, COMPOSITE_MSG=4, FRAG_MSG=5, NIO_MSG=6;
+    byte BYTES_MSG=0, EMPTY_MSG=1, OBJ_MSG=2, OBJ_MSG_SERIALIZABLE=3, COMPOSITE_MSG=4, FRAG_MSG=5,
+      NIO_MSG=6, NIO_DIRECT_MSG=7;
 
     /** Returns the type of the message, e.g. BYTES_MSG, OBJ_MSG etc */
     byte                        getType();

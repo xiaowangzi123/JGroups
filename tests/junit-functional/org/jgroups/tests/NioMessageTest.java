@@ -1,13 +1,10 @@
 package org.jgroups.tests;
 
-import org.jgroups.*;
-import org.jgroups.util.Bits;
-import org.jgroups.util.SizeStreamable;
-import org.jgroups.util.Streamable;
+import org.jgroups.Global;
+import org.jgroups.Message;
+import org.jgroups.NioMessage;
 import org.testng.annotations.Test;
 
-import java.io.DataInput;
-import java.io.DataOutput;
 import java.nio.ByteBuffer;
 import java.util.Objects;
 
@@ -37,6 +34,32 @@ public class NioMessageTest extends MessageTestBase {
         assert msg.getLength() > 0;
     }
 
+    public void testConstructorWithDirectByteBuffer() {
+        try {
+            //noinspection ResultOfObjectAllocationIgnored
+            new NioMessage(null, ByteBuffer.allocateDirect(4));
+            assert false: "initialization of NioMessage with direct byte buffer should have thrown an exception";
+        }
+        catch(Exception ex) {
+            assert ex instanceof IllegalArgumentException;
+            System.out.printf("received exception as expected: %s", ex);
+        }
+    }
+
+    public void testGetArray() {
+        byte[] array="hello world".getBytes();
+        Message msg=new NioMessage(null, array);
+        assert msg.hasArray() && msg.getArray().length == array.length;
+    }
+
+    public void testSetArrayWithOffset() {
+        Message msg=new NioMessage(null);
+        byte[] array="hello world".getBytes();
+        msg.setArray(array, 6, 5);
+        assert msg.getLength() == 5 && msg.getOffset() == 6;
+        String s=new String(msg.getArray(), msg.getOffset(), msg.getLength());
+        assert s.equals("world");
+    }
 
     public void testObject() throws Exception {
         Message msg=new NioMessage(null, new Person(53, "Bela"));
@@ -67,36 +90,18 @@ public class NioMessageTest extends MessageTestBase {
     }
 
 
-    public void testObject5() throws Exception {
-        try {
-            Message msg=new ObjectMessage(null, "hello world");
-            assert false : String.format("%s cannot accept non size-streamable object", msg.getClass().getSimpleName());
-        }
-        catch(Throwable t) {
-            assert t instanceof IllegalArgumentException;
-        }
-    }
-
     public void testSetNullObject() throws Exception {
-        Message msg=new ObjectMessage(null, null);
+        Message msg=new NioMessage(null, (ByteBuffer)null);
         _testSize(msg);
         byte[] buf=marshal(msg);
-        Message msg2=unmarshal(ObjectMessage.class, buf);
-        Person p=msg2.getObject();
+        Message msg2=unmarshal(NioMessage.class, buf);
+        Object p=msg2.getObject();
         assert p == null;
     }
 
-    public void testSetNullObject2() throws Exception {
-        Message msg=new ObjectMessageSerializable(null, null);
-        _testSize(msg);
-        byte[] buf=marshal(msg);
-        Message msg2=unmarshal(ObjectMessageSerializable.class, buf);
-        Person p=msg2.getObject();
-        assert p == null;
-    }
 
     public void testSetObject() {
-        Message msg=new ObjectMessage(null, new Person(53, "Bela"));
+        Message msg=new NioMessage(null, new Person(53, "Bela"));
         assert msg.getObject() != null;
         msg.setObject(new Person(15, "Nicole"));
         Person p=msg.getObject();
@@ -105,48 +110,6 @@ public class NioMessageTest extends MessageTestBase {
         assert msg.getObject() == null;
     }
 
-
-
-    protected static class BasePerson implements Streamable {
-        protected int    age;
-        protected String name;
-
-        public BasePerson() {
-        }
-
-        public BasePerson(int age, String name) {
-            this.age=age;
-            this.name=name;
-        }
-
-        public void writeTo(DataOutput out) throws Exception {
-            out.writeInt(age);
-            Bits.writeString(name, out);
-        }
-
-        public void readFrom(DataInput in) throws Exception {
-            age=in.readInt();
-            name=Bits.readString(in);
-        }
-
-        public String toString() {
-            return String.format("name=%s, age=%d", name, age);
-        }
-    }
-
-    protected static class Person extends BasePerson implements SizeStreamable {
-
-        public Person() {
-        }
-
-        public Person(int age, String name) {
-            super(age, name);
-        }
-
-        public int serializedSize() {
-            return Global.INT_SIZE + Bits.size(name);
-        }
-    }
 
 
 }

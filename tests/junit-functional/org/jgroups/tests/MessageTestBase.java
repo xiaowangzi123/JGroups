@@ -1,15 +1,20 @@
 package org.jgroups.tests;
 
+import org.jgroups.Global;
 import org.jgroups.Header;
 import org.jgroups.Message;
 import org.jgroups.protocols.PingHeader;
 import org.jgroups.protocols.TpHeader;
 import org.jgroups.protocols.pbcast.NakAckHeader2;
+import org.jgroups.util.Bits;
+import org.jgroups.util.SizeStreamable;
+import org.jgroups.util.Streamable;
 import org.jgroups.util.Util;
 import org.testng.Assert;
 
 import java.io.DataInput;
 import java.io.DataOutput;
+import java.nio.ByteBuffer;
 import java.util.function.Supplier;
 
 /**
@@ -53,6 +58,9 @@ public class MessageTestBase {
         return Util.streamableFromByteBuffer(cl, buf);
     }
 
+    protected static Message unmarshal(Class<? extends Message> cl, ByteBuffer buf) throws Exception {
+        return Util.streamableFromByteBuffer(cl, buf);
+    }
 
     protected static class DummyHeader extends Header {
         protected short num;
@@ -68,4 +76,46 @@ public class MessageTestBase {
         public void   readFrom(DataInput in)  throws Exception {}
         public String toString()                               {return "DummyHeader(" + num + ")";}
     }
+
+    protected static class BasePerson implements Streamable {
+        protected int    age;
+        protected String name;
+
+        public BasePerson() {
+        }
+
+        public BasePerson(int age, String name) {
+            this.age=age;
+            this.name=name;
+        }
+
+        public void writeTo(DataOutput out) throws Exception {
+            out.writeInt(age);
+            Bits.writeString(name, out);
+        }
+
+        public void readFrom(DataInput in) throws Exception {
+            age=in.readInt();
+            name=Bits.readString(in);
+        }
+
+        public String toString() {
+            return String.format("name=%s, age=%d", name, age);
+        }
+    }
+
+    protected static class Person extends BasePerson implements SizeStreamable {
+
+        public Person() {
+        }
+
+        public Person(int age, String name) {
+            super(age, name);
+        }
+
+        public int serializedSize() {
+            return Global.INT_SIZE + Bits.size(name);
+        }
+    }
+
 }

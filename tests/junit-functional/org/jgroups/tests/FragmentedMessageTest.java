@@ -76,8 +76,8 @@ public class FragmentedMessageTest {
     public void testFragmentationWithNioDirectMessage() throws Exception {
         ByteBuffer buf=ByteBuffer.allocateDirect(array.length);
         buf.put(array).flip();
-        Message original_msg=new NioMessage(dest, buf).setSrc(src);
-        Consumer<Message> verifier=m -> verify(getArray(((NioMessage)m).getBuffer()));
+        Message original_msg=new NioDirectMessage(dest, buf).setSrc(src);
+        Consumer<Message> verifier=m -> verify(m.getArray());
         _testFragmentation(original_msg, verifier);
     }
 

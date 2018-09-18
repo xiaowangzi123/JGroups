@@ -21,6 +21,15 @@ import java.util.function.Supplier;
  * @author Bela Ban
  */
 public class NioDirectMessage extends NioMessage {
+    /**
+     * If true, when reading a message from the network, memory for {@link #buf} is allocated from the heap rather than
+     * off-heap. This may be useful if we want to use off-heap (direct) memory only for sending, but not receiving of
+     * messages.<br/>
+     * An {@link NioDirectMessage} always starts out with this flag disabled, so the initial buffer uses direct memory.
+     * If the flag is changed to true, then subsequent allocations (e.g. through {@link #setArray(byte[], int, int)},
+     * {@link #setObject(Object)} or reading the contents from the network will use heap-memory.
+     */
+    protected boolean use_heap_memory;
 
     /**
      * Constructs a message given a destination address
@@ -28,8 +37,7 @@ public class NioDirectMessage extends NioMessage {
      *            Otherwise, it is sent to a single member.
      */
     public NioDirectMessage(Address dest) {
-        setDest(dest);
-        headers=createHeaders(Util.DEFAULT_HEADERS);
+        super(dest);
     }
 
    /**
@@ -40,8 +48,7 @@ public class NioDirectMessage extends NioMessage {
     *            allowed) since we don't copy the contents.
     */
     public NioDirectMessage(Address dest, ByteBuffer buf) {
-        this(dest);
-        this.buf=buf;
+        super(dest, buf);
     }
 
 
@@ -53,48 +60,42 @@ public class NioDirectMessage extends NioMessage {
     *            Serializable, Externalizable or Streamable, or be a basic type (e.g. Integer, Short etc)).
     */
     public NioDirectMessage(Address dest, Object obj) {
-        this(dest);
-        setObject(obj);
+        super(dest, obj);
     }
 
 
     public NioDirectMessage() {
-        this(true);
+        super();
     }
 
 
     public NioDirectMessage(boolean create_headers) {
-        if(create_headers)
-            headers=createHeaders(Util.DEFAULT_HEADERS);
+        super(create_headers);
     }
 
-    public Supplier<? extends Message> create() {return NioDirectMessage::new;}
-    public ByteBuffer getBuffer()               {return buf;}
-    public byte       getType()                 {return Message.NIO_MSG;}
-    public boolean    hasPayload()              {return buf != null;}
-    public boolean    hasArray()                {return buf != null && buf.hasArray();}
-    public int        getOffset()               {return hasArray()? buf.arrayOffset() : 0;}
-    public int        getLength()               {return buf != null? buf.remaining() : 0;}
+    public Supplier<? extends Message> create()                 {return NioDirectMessage::new;}
+    public byte                        getType()                {return Message.NIO_DIRECT_MSG;}
+    public boolean                     useHeapMemory()          {return use_heap_memory;}
+    public <T extends Message> T       useHeapMemory(boolean b) {use_heap_memory=b; return (T)this;}
 
-    /** Returns the array of the buffer if the ByteBuffer has an array, null otherwise */
-    public byte[]     getArray()                {return buf.hasArray()? buf.array() : null;}
+    /** Returns a copy of the remaining data in {@link ByteBuffer} (if the buffer is not null). Note that this
+     * operation is expensive as a new array will be allocated, so use sparingly! */
+    public byte[]                      getArray()               {return hasArray()? buf.array() : getContents();}
 
 
 
     /**
-     * Sets the internal buffer to point to a subset of a given buffer.<p/>
-     * <em>
-     * Note that the byte[] buffer passed as argument must not be modified. Reason: if we retransmit the
-     * message, it would still have a ref to the original byte[] buffer passed in as argument, and so we would
-     * retransmit a changed byte[] buffer !
-     * </em>
+     * Sets the internal buffer to point to a subset of a given buffer.<br/>
+     * Note that the byte[] buffer passed as argument must not be modified: if we retransmit the message, it would still
+     * have a ref to the original byte[] array passed in as argument, and so we would retransmit a changed byte[] array!
      *
      * @param b The reference to a given buffer. If null, we'll reset the buffer to null
      * @param offset The initial position
      * @param length The number of bytes
      */
     public <T extends Message> T setArray(byte[] b, int offset, int length) {
-        buf=ByteBuffer.wrap(b, offset, length);
+        if(b != null)
+            buf=createBuffer(b, offset, length);
         return (T)this;
     }
 
@@ -104,9 +105,9 @@ public class NioDirectMessage extends NioMessage {
      * message, it would still have a ref to the original byte[] buffer passed in as argument, and so we would
      * retransmit a changed byte[] buffer !
      */
-    public <T extends Message> T setArray(ByteArray buf) {
-        if(buf != null)
-            this.buf=ByteBuffer.wrap(buf.getArray(), buf.getOffset(), buf.getLength());
+    public <T extends Message> T setArray(ByteArray ba) {
+        if(ba != null)
+            this.buf=createBuffer(ba.getArray(), ba.getOffset(), ba.getLength());
         return (T)this;
     }
 
@@ -148,14 +149,30 @@ public class NioDirectMessage extends NioMessage {
      * @return the object
      */
     public <T extends Object> T getObject(ClassLoader loader) {
+        if(buf == null)
+            return null;
+
         try {
-            return hasArray()? Util.objectFromByteBuffer(getArray(), getOffset(), getLength(), loader) : null;
+            return Util.objectFromByteBuffer(buf, loader);
         }
         catch(Exception ex) {
             throw new IllegalArgumentException(ex);
         }
     }
 
+
+   /* public <T extends Object> T getObject(ClassLoader loader) {
+        byte[] array=hasArray()? getArray() : getContents();
+
+        try {
+            return hasArray()? Util.objectFromByteBuffer(array, getOffset(), getLength(), loader) :
+              Util.objectFromByteBuffer(array, 0, array.length, loader);
+        }
+        catch(Exception ex) {
+            throw new IllegalArgumentException(ex);
+        }
+    }
+*/
 
 
    /**
@@ -216,30 +233,23 @@ public class NioDirectMessage extends NioMessage {
     }
 
     protected int sizeOfPayload() {
-        return Global.INT_SIZE + getLength() + (buf != null? Global.BYTE_SIZE : 0);
+        return super.sizeOfPayload() + (buf != null? Global.BYTE_SIZE : 0); // use_heap_memory_on_read;
     }
 
     protected void writePayload(DataOutput out) throws Exception {
         out.writeInt(buf != null? getLength() : -1);
         if(buf != null) {
-            out.writeBoolean(buf.isDirect());
-            if(buf.hasArray()) {
-                byte[] buffer=buf.array();
-                int offset=buf.arrayOffset()+buf.position(), length=buf.remaining();
-                out.write(buffer, offset, length);
-            }
-            else {
-                // We need to duplicate the buffer, or else writing its contents to the output stream would modify
-                // position; this would break potential retransmission
-                // We still need a transfer buffer as there is no way to transfer contents of a ByteBuffer directly to
-                // an output stream; once we have a transport that directly supports ByteBuffers, we can change this
-                ByteBuffer copy=buf.duplicate();
-                byte[] transfer_buf=new byte[Math.max(copy.remaining()/10, 128)];
-                while(copy.remaining() > 0) {
-                    int bytes=Math.min(transfer_buf.length, copy.remaining());
-                    copy.get(transfer_buf, 0, bytes);
-                    out.write(transfer_buf, 0, bytes);
-                }
+            out.writeBoolean(use_heap_memory);
+            // We need to duplicate the buffer, or else writing its contents to the output stream would modify
+            // position; this would break potential retransmission
+            // We still need a transfer buffer as there is no way to transfer contents of a ByteBuffer directly to
+            // an output stream; once we have a transport that directly supports ByteBuffers, we can change this
+            ByteBuffer copy=buf.duplicate();
+            byte[] transfer_buf=new byte[Math.max(copy.remaining()/10, 128)];
+            while(copy.remaining() > 0) {
+                int bytes=Math.min(transfer_buf.length, copy.remaining());
+                copy.get(transfer_buf, 0, bytes);
+                out.write(transfer_buf, 0, bytes);
             }
         }
     }
@@ -248,19 +258,28 @@ public class NioDirectMessage extends NioMessage {
         int len=in.readInt();
         if(len < 0)
             return;
-        boolean is_direct=in.readBoolean();
+        use_heap_memory=in.readBoolean();
         byte[] tmp=new byte[len];
         in.readFully(tmp, 0, tmp.length);
-        if(is_direct) {
-            // todo: replace with factory; so users can provide their own allocation mechanism (e.g. pooling)
-            buf=ByteBuffer.allocateDirect(len)
-              .put(tmp, 0, tmp.length);
-            buf.flip();
-        }
-        else
-            buf=ByteBuffer.wrap(tmp, 0, tmp.length);
+        // todo: replace with factory; so users can provide their own allocation mechanism (e.g. pooling)
+        buf=createBuffer(tmp, 0, tmp.length);
     }
 
+    /** Returns a copy of the byte array between position and limit; requires a non-null buffer */
+    protected byte[] getContents() {
+        ByteBuffer tmp=buf.duplicate();
+        int length=tmp.remaining();
+        byte[] retval=new byte[length];
+        tmp.get(retval, 0, retval.length);
+        return retval;
+    }
 
+    protected ByteBuffer createBuffer(byte[] array, int offset, int length) {
+        return use_heap_memory? super.createBuffer(array, offset, length) :
+          (ByteBuffer)ByteBuffer.allocateDirect(length).put(array, offset, length).flip();
+    }
 
+    protected ByteBuffer checkCorrectType(ByteBuffer b) {
+        return b; // we can also handle a heap-based ByteBuffer
+    }
 }

@@ -19,6 +19,7 @@ public class DefaultMessageFactory implements MessageFactory {
         creators[Message.COMPOSITE_MSG]=CompositeMessage::new;
         creators[Message.FRAG_MSG]=FragmentedMessage::new;
         creators[Message.NIO_MSG]=NioMessage::new;
+        creators[Message.NIO_DIRECT_MSG]=NioDirectMessage::new;
     }
 
     public <T extends Message> T create(byte type) {
