@@ -56,8 +56,8 @@ public class FragmentedMessage extends BytesMessage { // we need the superclass'
     protected void readPayload(DataInput in) throws Exception {
         this.length=in.readInt();
         if(this.length > 0) {
-            this.buf=new byte[this.length];
-            in.readFully(this.buf);
+            this.array=new byte[this.length];
+            in.readFully(this.array);
         }
     }
 
